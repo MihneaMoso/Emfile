@@ -1,46 +1,53 @@
-import type React from "react"
-import type { Metadata } from "next"
-import Link from "next/link"
-import { FileText } from "lucide-react"
-import { ClerkProvider } from '@clerk/nextjs'
-import { ThemeProvider } from "@/components/theme-provider"
-import { Header } from "@/components/header"
-import "./globals.css"
-import { Footer } from "@/components/footer"
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
+import { TorrentProvider } from "@/lib/torrent/provider";
+import { Header } from "@/components/header";
+import { Footer } from "@/components/footer";
+import "./globals.css";
+
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
-  title: "FileHub: Personal File Sharing Platform",
-  description: "Create your own personalized page with all your important files and documents",
-  generator: "v0.dev",
-}
+  title: {
+    default: "Emfile — a linktree for files",
+    template: "%s · Emfile",
+  },
+  description:
+    "Drop a file, get a shareable page. File bytes travel peer-to-peer in the browser; the server hosts only metadata.",
+};
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-    >
-      <html lang="en" suppressHydrationWarning>
-        <body>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <div className="flex min-h-screen flex-col">
-              <Header />
-              <div className="flex-1">
-                {children}
-              </div>
-              <Footer />
-            </div>
-          </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
-  )
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-dvh flex-col antialiased`}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TorrentProvider>
+            <Header />
+            <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-16 sm:px-6">
+              {children}
+            </main>
+            <Footer />
+            <Toaster richColors closeButton position="bottom-center" />
+          </TorrentProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
 }

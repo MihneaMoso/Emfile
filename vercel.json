@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ],
+  "functions": {
+    "app/api/**/*.ts": {
+      "regions": ["iad"]
+    }
+  }
+}

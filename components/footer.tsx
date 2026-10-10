@@ -1,30 +1,26 @@
-"use client"
-import Link from "next/link"
+import Link from "next/link";
 
 export function Footer() {
-    return (
-        <footer className="mt-16 border-t pt-8 pb-8">
-            <div className="container mx-auto max-w-7xl flex h-16 items-center justify-between px-4 md:px-6">
-                <div className="text-sm text-muted-foreground">© 2025 FileHub. All rights reserved.</div>
-                <div className="text-sm text-muted-foreground text-center">
-                    Powered by{" "}
-                    <Link href="/" className="font-medium text-foreground hover:underline">
-                        FileHub
-                    </Link>
-                    {" "}• Create your own file sharing page
-                </div>
-                <nav className="flex gap-2 sm:gap-4 text-sm">
-                    <Link href="#" className="text-muted-foreground hover:underline">
-                        Terms
-                    </Link>
-                    <Link href="#" className="text-muted-foreground hover:underline">
-                        Privacy
-                    </Link>
-                    <Link href="#" className="text-muted-foreground hover:underline">
-                        Contact
-                    </Link>
-                </nav>
-            </div>
-        </footer>
-    )
+  // REPORT_EMAIL is display-only (footer mailto:); Emfile v1 sends no email.
+  const report = process.env.REPORT_EMAIL ?? "";
+  return (
+    <footer className="border-t">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <p>
+          <span className="font-semibold text-foreground">Emfile</span> — files
+          travel peer-to-peer. Nothing is stored on the server.
+        </p>
+        <nav className="flex items-center gap-4" aria-label="Footer">
+          <Link href="/" className="hover:text-foreground">
+            Home
+          </Link>
+          {report ? (
+            <a href={`mailto:${report}`} className="hover:text-foreground">
+              Report abuse
+            </a>
+          ) : null}
+        </nav>
+      </div>
+    </footer>
+  );
 }
