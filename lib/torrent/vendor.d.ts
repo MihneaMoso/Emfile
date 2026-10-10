@@ -1,14 +1,11 @@
-// The npm webtorrent package ships no TypeScript declarations, so this
-// ambient declaration covers the dynamic import in client.ts. (This file
-// must stay a global script — no imports/exports — for it to apply.)
-declare module "webtorrent" {
-  const WebTorrent: new (opts?: unknown) => {
-    torrents: unknown[];
-    seed: (...args: never[]) => unknown;
-    add: (...args: never[]) => unknown;
-    get: (...args: never[]) => unknown;
-    remove: (...args: never[]) => void;
-    destroy: (...args: never[]) => void;
-  };
-  export default WebTorrent;
-}
+// WebTorrent browser build is loaded at runtime via dynamic import() of
+// /vendor/webtorrent.min.js with the bundler bypassed (see client.ts).
+// - No declaration for the npm `webtorrent` package exists on purpose:
+//   importing it would pull Node-only code into the browser bundle.
+// - client.ts imports via a `string`-typed variable (not a literal) so
+//   TypeScript types it as `Promise<any>` without module resolution, and
+//   bundlers leave the webpackIgnore'd runtime import untouched.
+export {};
+
+
+
