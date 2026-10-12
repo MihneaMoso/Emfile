@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/loading";
 
 export function LoginForm() {
   const router = useRouter();
@@ -101,7 +102,13 @@ export function LoginForm() {
             </p>
           ) : null}
           <Button type="submit" disabled={busy}>
-            {busy ? "Logging in…" : "Log in"}
+            {busy ? (
+              <>
+                <Spinner label="Logging in" /> Logging in…
+              </>
+            ) : (
+              "Log in"
+            )}
           </Button>
         </form>
         <p className="text-sm text-muted-foreground">

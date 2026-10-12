@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import type { FileSummary } from "@/lib/page-types";
 import { useDownload } from "@/lib/torrent/hooks";
 import { Button } from "./ui/button";
+import { ProgressBar, Spinner } from "./loading";
 
 export function DownloadButton({ file }: { file: FileSummary }) {
   const dl = useDownload(file.magnetUri, file.name);
@@ -43,24 +44,20 @@ export function DownloadButton({ file }: { file: FileSummary }) {
   return (
     <div className="flex flex-col items-stretch gap-1">
       <div className="flex min-w-40 flex-col gap-1" aria-live="polite">
-        <p className="text-xs text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Spinner
+            label={
+              dl.phase === "downloading"
+                ? `Downloading ${pct}%`
+                : "Connecting"
+            }
+          />
           {dl.peers > 0
             ? `Found ${dl.peers} peer${dl.peers === 1 ? "" : "s"}`
             : "Connecting…"}
           {dl.phase === "downloading" ? ` · ${pct}%` : ""}
         </p>
-        <div
-          className="h-1.5 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuenow={pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className="h-full bg-primary transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        <ProgressBar value={pct} label={`Download progress for ${file.name}`} />
         <Button size="sm" variant="ghost" onClick={dl.cancel}>
           Cancel
         </Button>

@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { Spinner } from "./loading";
 
 async function loadLanguage(fileName: string) {
   const lang = languageForFile(fileName);
@@ -197,7 +198,13 @@ function TextEditorBody({
           {dirty ? "Discard" : "Close"}
         </Button>
         <Button onClick={() => void save()} disabled={saving || !dirty}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? (
+            <>
+              <Spinner label="Saving file" /> Saving…
+            </>
+          ) : (
+            "Save"
+          )}
         </Button>
       </DialogFooter>
     </>

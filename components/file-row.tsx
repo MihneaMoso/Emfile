@@ -12,6 +12,7 @@ import { DownloadButton } from "./download-button";
 import { SeedAgainButton } from "./seed-again";
 import { RenameDialog } from "./rename-dialog";
 import { DeleteFileDialog } from "./delete-file-dialog";
+import { Spinner } from "./loading";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +23,14 @@ import {
 
 const TextEditor = dynamic(
   () => import("./text-editor").then((m) => m.TextEditor),
-  { ssr: false, loading: () => <p className="text-sm">Loading editor…</p> },
+  {
+    ssr: false,
+    loading: () => (
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Spinner label="Loading editor" /> Loading editor…
+      </p>
+    ),
+  },
 );
 
 export function FileRow({

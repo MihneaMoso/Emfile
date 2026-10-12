@@ -8,6 +8,7 @@ import { Dropzone } from "@/components/dropzone";
 import { FileList } from "@/components/file-list";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { seedAndRegister } from "@/components/seed-and-register";
+import { Spinner } from "@/components/loading";
 import { useTorrent } from "@/lib/torrent/provider";
 import { PageHeaderEditor } from "./page-header-editor";
 
@@ -123,10 +124,26 @@ export function FilePageBody({
         </div>
       </div>
       {canEdit ? (
-        <Dropzone
-          onFiles={(f) => void upload(f)}
-          label={uploading ? "Uploading…" : "Drop files to add them, or click to browse"}
-        />
+        <div className="relative">
+          <Dropzone
+            onFiles={(f) => void upload(f)}
+            label={
+              uploading
+                ? "Uploading… keep this tab open"
+                : "Drop files to add them, or click to browse"
+            }
+          />
+          {uploading ? (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-background/60 backdrop-blur-[1px]"
+              role="status"
+              aria-label="Uploading"
+            >
+              <Spinner label="Uploading files" />
+              <span className="text-sm font-medium">Uploading…</span>
+            </div>
+          ) : null}
+        </div>
       ) : null}
       <FileList files={files} slug={slug} canEdit={canEdit} />
       {isAdmin ? (

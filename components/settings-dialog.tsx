@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { SettingsForm, settingsFromPage } from "./settings-form";
+import { Spinner } from "./loading";
 
 export function SettingsDialog({
   page,
@@ -66,6 +67,8 @@ function SettingsDialogBody({
   const router = useRouter();
   const [state, setState] = React.useState(() => settingsFromPage(page));
   const [busy, setBusy] = React.useState(false);
+  const [claiming, setClaiming] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   const save = async () => {
     setBusy(true);
@@ -115,6 +118,7 @@ function SettingsDialogBody({
   };
 
   const claim = async () => {
+    setClaiming(true);
     try {
       const res = await fetch(`/api/pages/${encodeURIComponent(slug)}/claim`, {
         method: "POST",
@@ -127,11 +131,14 @@ function SettingsDialogBody({
       router.refresh();
     } catch {
       toast.error("Could not claim this page.");
+    } finally {
+      setClaiming(false);
     }
   };
 
   const destroy = async () => {
     if (!window.confirm("Delete this page and all its files?")) return;
+    setDeleting(true);
     try {
       const res = await fetch(`/api/pages/${encodeURIComponent(slug)}`, {
         method: "DELETE",
@@ -142,6 +149,8 @@ function SettingsDialogBody({
       router.push(signedIn ? "/dashboard" : "/");
     } catch {
       toast.error("Could not delete.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -154,20 +163,38 @@ function SettingsDialogBody({
         onChange={setState}
       />
       {!page.ownerId && signedIn ? (
-        <Button variant="outline" onClick={claim}>
-          Claim this page to my account
+        <Button variant="outline" onClick={claim} disabled={claiming}>
+          {claiming ? (
+            <>
+              <Spinner label="Claiming page" /> Claiming…
+            </>
+          ) : (
+            "Claim this page to my account"
+          )}
         </Button>
       ) : null}
       <DialogFooter>
-        <Button variant="destructive" onClick={destroy}>
-          Delete page
+        <Button variant="destructive" onClick={destroy} disabled={deleting}>
+          {deleting ? (
+            <>
+              <Spinner label="Deleting page" /> Deleting…
+            </>
+          ) : (
+            "Delete page"
+          )}
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={save} disabled={busy}>
-            {busy ? "Saving…" : "Save"}
+            {busy ? (
+              <>
+                <Spinner label="Saving settings" /> Saving…
+              </>
+            ) : (
+              "Save"
+            )}
           </Button>
         </div>
       </DialogFooter>

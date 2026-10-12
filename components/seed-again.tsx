@@ -7,6 +7,7 @@ import type { FileSummary } from "@/lib/page-types";
 import { announceList } from "@/lib/torrent/client";
 import { useTorrent } from "@/lib/torrent/provider";
 import { Button } from "./ui/button";
+import { Spinner } from "./loading";
 
 /**
  * Re-seed a P2P file: recompute the infohash of the picked file and verify
@@ -96,7 +97,15 @@ export function SeedAgainButton({
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
-        <RefreshCw aria-hidden /> {busy ? "Checking…" : "Seed again"}
+        {busy ? (
+          <>
+            <Spinner label="Verifying file" /> Checking…
+          </>
+        ) : (
+          <>
+            <RefreshCw aria-hidden /> Seed again
+          </>
+        )}
       </Button>
     </>
   );

@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Spinner } from "./loading";
 
 export function UnlockForm({ slug }: { slug: string }) {
   const [secret, setSecret] = React.useState("");
@@ -71,7 +72,13 @@ export function UnlockForm({ slug }: { slug: string }) {
             </p>
           ) : null}
           <Button type="submit" disabled={pending || secret.length === 0}>
-            {pending ? "Unlocking…" : "Unlock"}
+            {pending ? (
+              <>
+                <Spinner label="Unlocking" /> Unlocking…
+              </>
+            ) : (
+              "Unlock"
+            )}
           </Button>
         </form>
       </CardContent>

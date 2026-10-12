@@ -3,23 +3,12 @@
 import useSWR from "swr";
 import type { PageResponse } from "@/lib/page-types";
 import { FilePageBody } from "@/components/file-page-body";
+import { LoadingSkeleton } from "@/components/loading";
 
 async function fetcher([_key, slug]: [string, string]): Promise<PageResponse> {
   const res = await fetch(`/api/pages/${encodeURIComponent(slug)}`);
   if (!res.ok) throw new Error("Failed to load page.");
   return (await res.json()) as PageResponse;
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="flex animate-pulse flex-col gap-4 py-8" aria-label="Loading">
-      <div className="h-9 w-2/3 rounded-xl bg-muted" />
-      <div className="h-4 w-1/2 rounded bg-muted" />
-      <div className="h-44 rounded-xl bg-muted" />
-      <div className="h-20 rounded-xl bg-muted" />
-      <div className="h-20 rounded-xl bg-muted" />
-    </div>
-  );
 }
 
 /** SWR wrapper: revalidates on focus, keeps server fallback for SEO/instant paint. */

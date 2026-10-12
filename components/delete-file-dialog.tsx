@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { Spinner } from "./loading";
 
 export function DeleteFileDialog({
   file,
@@ -58,7 +59,13 @@ export function DeleteFileDialog({
             Cancel
           </Button>
           <Button variant="destructive" onClick={remove} disabled={busy}>
-            {busy ? "Deleting…" : "Delete"}
+            {busy ? (
+              <>
+                <Spinner label="Deleting file" /> Deleting…
+              </>
+            ) : (
+              "Delete"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/loading";
 
 export function SignupForm() {
   const router = useRouter();
@@ -129,7 +130,13 @@ export function SignupForm() {
             </p>
           ) : null}
           <Button type="submit" disabled={busy}>
-            {busy ? "Creating account…" : "Sign up"}
+            {busy ? (
+              <>
+                <Spinner label="Creating account" /> Creating account…
+              </>
+            ) : (
+              "Sign up"
+            )}
           </Button>
         </form>
         <p className="text-sm text-muted-foreground">

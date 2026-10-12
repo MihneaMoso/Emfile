@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dropzone } from "@/components/dropzone";
 import { seedAndRegister } from "./seed-and-register";
 import { PinSection, SlugField, useSlugCheck } from "./slug-pin-fields";
+import { Spinner } from "@/components/loading";
 
 export function LandingCreator() {
   const router = useRouter();
@@ -90,7 +91,13 @@ export function LandingCreator() {
           setRestrictView={setRestrictView}
         />
         <Button size="lg" disabled={creating} onClick={() => void create([])}>
-          {creating ? "Creating…" : "Create page"}
+          {creating ? (
+            <>
+              <Spinner label="Creating page" /> Creating…
+            </>
+          ) : (
+            "Create page"
+          )}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           Tip: drop files onto the zone above to create and seed in one step.

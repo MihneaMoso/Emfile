@@ -8,6 +8,7 @@ import type { PageSummary } from "@/lib/page-types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/loading";
 
 export function DashboardBody({ initial }: { initial: PageSummary[] }) {
   const router = useRouter();
@@ -100,7 +101,13 @@ export function DashboardBody({ initial }: { initial: PageSummary[] }) {
                 disabled={deleting === p.slug}
                 onClick={() => void destroy(p.slug)}
               >
-                {deleting === p.slug ? "…" : "Delete"}
+                {deleting === p.slug ? (
+                  <>
+                    <Spinner label={`Deleting ${p.slug}`} /> Deleting…
+                  </>
+                ) : (
+                  "Delete"
+                )}
               </Button>
             </div>
           </CardContent>

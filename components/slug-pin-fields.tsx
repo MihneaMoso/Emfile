@@ -4,6 +4,7 @@ import * as React from "react";
 import { isSlugValid } from "@/lib/slug";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/loading";
 
 export type SlugState = "idle" | "checking" | "ok" | "taken" | "invalid";
 
@@ -70,18 +71,23 @@ export function SlugField({
       </div>
       <p
         id={`${idPrefix}-slug-hint`}
-        className="text-xs text-muted-foreground"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground"
         aria-live="polite"
       >
-        {slugState === "checking"
-          ? "Checking availability…"
-          : slugState === "ok"
-            ? "Available."
-            : slugState === "taken"
-              ? "That slug is taken."
-              : slugState === "invalid"
-                ? "Invalid slug (3–40 chars, a-z/0-9/dashes)."
-                : "Pick anything memorable — it becomes the page URL."}
+        {slugState === "checking" ? (
+          <>
+            <Spinner label="Checking slug availability" />
+            Checking availability…
+          </>
+        ) : slugState === "ok" ? (
+          "Available."
+        ) : slugState === "taken" ? (
+          "That slug is taken."
+        ) : slugState === "invalid" ? (
+          "Invalid slug (3–40 chars, a-z/0-9/dashes)."
+        ) : (
+          "Pick anything memorable — it becomes the page URL."
+        )}
       </p>
     </div>
   );
