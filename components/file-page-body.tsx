@@ -16,12 +16,18 @@ export function FilePageBody({
   slug,
   initial,
   signedIn,
+  syncing = false,
 }: {
   slug: string;
   initial: PageResponse;
   signedIn: boolean;
+  /** True while SWR is polling for files still being registered. */
+  syncing?: boolean;
 }) {
   const { ensureClient, markSeeding } = useTorrent();
+  // SWR owns freshness (polls until non-empty, revalidates on focus); local
+  // state mirrors props for optimistic edits. The wrapper remounts this body
+  // via key whenever server data changes, so no prop-sync effect is needed.
   const [page, setPage] = React.useState(initial.page);
   const [files, setFiles] = React.useState(initial.files);
   const [role, setRole] = React.useState(initial.role);
@@ -145,7 +151,7 @@ export function FilePageBody({
           ) : null}
         </div>
       ) : null}
-      <FileList files={files} slug={slug} canEdit={canEdit} />
+      <FileList files={files} slug={slug} canEdit={canEdit} syncing={syncing} />
       {isAdmin ? (
         <SettingsDialog
           page={page}

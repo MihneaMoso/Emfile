@@ -11,7 +11,9 @@ async function fetcher([_key, slug]: [string, string]): Promise<PageResponse> {
   return (await res.json()) as PageResponse;
 }
 
-/** SWR wrapper: revalidates on focus, keeps server fallback for SEO/instant paint. */
+/** SWR wrapper: revalidates on focus + polls for files registered after instant
+ * navigation (seeding continues in the background once the file page mounts).
+ * Shows a skeleton only when there is genuinely no data yet. */
 export function FilePageClient({
   slug,
   initial,
@@ -21,11 +23,20 @@ export function FilePageClient({
   initial: PageResponse;
   signedIn: boolean;
 }) {
-  const { data, error, isLoading } = useSWR<PageResponse>(["page", slug], fetcher, {
-    fallbackData: initial,
-    revalidateOnFocus: true,
-    shouldRetryOnError: false,
-  });
+  const { data, error, isLoading, isValidating } = useSWR<PageResponse>(
+    ["page", slug],
+    fetcher,
+    {
+      fallbackData: initial,
+      revalidateOnFocus: true,
+      // Seed-and-register can take a while (WebTorrent load + infohash +
+      // metadata POST). Poll every 3s until the file list is non-empty,
+      // then stop polling.
+      refreshInterval: (latest) =>
+        latest && latest.files.length === 0 ? 3000 : 0,
+      shouldRetryOnError: false,
+    },
+  );
 
   if (isLoading && !data) return <LoadingSkeleton />;
   if (error || !data) {
@@ -45,5 +56,14 @@ export function FilePageClient({
       </div>
     );
   }
-  return <FilePageBody slug={slug} initial={data} signedIn={signedIn} />;
+  const stamp = `${data.page.updatedAt}:${data.files.length}:${data.files.map((f) => `${f.id}:${f.revision}`).join(",")}`;
+  return (
+    <FilePageBody
+      key={stamp}
+      slug={slug}
+      initial={data}
+      signedIn={signedIn}
+      syncing={isValidating && data.files.length === 0}
+    />
+  );
 }
