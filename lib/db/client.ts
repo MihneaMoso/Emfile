@@ -1,10 +1,11 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
+import { normalizeDatabaseUrl } from "./url";
 
 function resolveUrl(): string {
   const turso = process.env.TURSO_DATABASE_URL;
-  if (turso && turso.length > 0) return turso;
+  if (turso && turso.length > 0) return normalizeDatabaseUrl(turso);
   return "file:./local.db";
 }
 

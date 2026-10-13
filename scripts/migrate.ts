@@ -1,6 +1,7 @@
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { normalizeDatabaseUrl } from "../lib/db/url";
 
 // Run with: bun run scripts/migrate.ts
 // Applies ./drizzle migrations to local.db or Turso when configured.
@@ -8,7 +9,7 @@ import { drizzle } from "drizzle-orm/libsql";
 async function main() {
   if (process.env.TURSO_DATABASE_URL) {
     const client = createClient({
-      url: process.env.TURSO_DATABASE_URL,
+      url: normalizeDatabaseUrl(process.env.TURSO_DATABASE_URL),
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
     const db = drizzle(client);
