@@ -121,7 +121,7 @@ sequenceDiagram
 - Create a `TorrentProvider` mounted in the **root layout**. The WebTorrent client is a **singleton that survives client-side navigation**. Going from `/` to `/file/<slug>` must not interrupt seeding, so use `router.push`, never a full reload.
 - **Lazy-load** WebTorrent: dynamic-import `webtorrent/dist/webtorrent.min.js` only on the first file interaction (prefetch on idle or on hover of the dropzone). If the bundler fails on it, copy that file to `/public/vendor/` and load it with `import(/* webpackIgnore: true */ ...)`.
 - Trackers and STUN come from env and must be configurable, because public trackers can go down:
-  - `NEXT_PUBLIC_TRACKERS` default: `wss://tracker.openwebtorrent.com,wss://tracker.webtorrent.dev`
+  - `NEXT_PUBLIC_TRACKERS` default: `wss://tracker.openwebtorrent.com`
   - `NEXT_PUBLIC_STUN` default: `stun:stun.l.google.com:19302,stun:global.stun.twilio.com:3478`
 
 ### Upload

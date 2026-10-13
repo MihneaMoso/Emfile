@@ -41,8 +41,12 @@ export function useDownload(magnetUri: string | null, fileName: string) {
   const [state, setState] = React.useState<DownloadState>(INITIAL);
   const torrentRef = React.useRef<Torrent | null>(null);
   const timerRef = React.useRef<number | null>(null);
+  // Generation counter: cancel() bumps it so an in-flight start() stops
+  // touching state (and disk) after the user gave up on it.
+  const runRef = React.useRef(0);
 
   const cancel = React.useCallback(() => {
+    runRef.current += 1;
     if (timerRef.current) window.clearTimeout(timerRef.current);
     const t = torrentRef.current;
     torrentRef.current = null;
@@ -65,8 +69,23 @@ export function useDownload(magnetUri: string | null, fileName: string) {
 
   const start = React.useCallback(async () => {
     if (!magnetUri) return;
+    const run = runRef.current + 1;
+    runRef.current = run;
+    const alive = () => runRef.current === run;
+    // Restart cleanly: drop any previous in-flight torrent and its timer.
+    const prev = torrentRef.current;
+    torrentRef.current = null;
+    if (prev) {
+      try {
+        prev.destroy();
+      } catch {
+        /* noop */
+      }
+    }
+    if (timerRef.current) window.clearTimeout(timerRef.current);
     setState({ ...INITIAL, phase: "connecting" });
     const client = await ensureClient();
+    if (!alive()) return;
     if (!client) {
       setState({
         ...INITIAL,
@@ -76,8 +95,31 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       return;
     }
     try {
+      // Reuse a complete local copy (e.g. this tab seeded the file) instead
+      // of destroying our own seed and re-downloading it from nobody.
       const existing = client.get(magnetUri);
       if (existing) {
+        const localFile = pickFile(existing.files, fileName);
+        if (localFile && existing.progress >= 1) {
+          setState((s) => ({
+            ...s,
+            phase: "saving",
+            progress: 1,
+            peers: existing.numPeers,
+          }));
+          const blob = await blobOf(localFile);
+          if (!alive()) return;
+          await saveBlobToDisk(blob, fileName);
+          if (!alive()) return;
+          setState((s) => ({
+            ...s,
+            phase: "done",
+            progress: 1,
+            peers: existing.numPeers,
+          }));
+          markSeeding(existing.infoHash);
+          return;
+        }
         try {
           existing.destroy();
         } catch {
@@ -88,9 +130,11 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       torrentRef.current = torrent;
 
       const onPeers = () => {
+        if (!alive()) return;
         setState((s) => ({ ...s, peers: torrent.numPeers }));
       };
       const onDownload = () => {
+        if (!alive()) return;
         setState((s) => ({
           ...s,
           phase: "downloading",
@@ -101,6 +145,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
         }));
       };
       const onSaving = () => {
+        if (!alive()) return;
         setState((s) => ({
           ...s,
           phase: "saving",
@@ -109,6 +154,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
         }));
       };
       const onDone = () => {
+        if (!alive()) return;
         setState((s) => ({
           ...s,
           phase: "done",
@@ -131,6 +177,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       // blob is assembled and written to disk (catalog requirement).
       torrent.on("done", onSaving);
       torrent.once("error", () => {
+        if (!alive()) return;
         setState((s) => ({
           ...s,
           phase: "error",
@@ -138,16 +185,16 @@ export function useDownload(magnetUri: string | null, fileName: string) {
         }));
       });
 
-      // No peers after ~20s: show the recovery hint.
+      // No peers after ~20s: show the recovery hint (the sanctioned terminal
+      // UX for seedless swarms: message + Cancel, per the P2P spec section).
       timerRef.current = window.setTimeout(onNoPeers, 20_000);
 
-      // Already-complete (seeder is this tab): skip straight to saving.
-      if (torrent.progress >= 1) onSaving();
+      // Magnet metadata (file list) arrives asynchronously from peers — never
+      // read .files before it does ("Torrent is empty" bug).
+      await waitForMetadata(torrent);
+      if (!alive()) return;
 
-      const file =
-        torrent.files.length === 1
-          ? torrent.files[0]
-          : torrent.files.find((f) => f.name === fileName) ?? torrent.files[0];
+      const file = pickFile(torrent.files, fileName);
       if (!file) {
         setState((s) => ({ ...s, phase: "error", error: "Torrent is empty." }));
         return;
@@ -159,20 +206,21 @@ export function useDownload(magnetUri: string | null, fileName: string) {
             return;
           }
           torrent.once("done", () => resolve());
-          torrent.once("error", () => reject(new Error("download failed")));
+          torrent.once("error", () =>
+            reject(new Error("Download failed. The seeder may be offline.")),
+          );
         };
         check();
       });
+      if (!alive()) return;
       onSaving();
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        file.getBlob((err, b) => {
-          if (err || !b) reject(err ?? new Error("blob failed"));
-          else resolve(b);
-        });
-      });
+      const blob = await blobOf(file);
+      if (!alive()) return;
       await saveBlobToDisk(blob, fileName);
+      if (!alive()) return;
       onDone();
     } catch (err) {
+      if (!alive()) return;
       setState((s) => ({
         ...s,
         phase: "error",
@@ -182,6 +230,47 @@ export function useDownload(magnetUri: string | null, fileName: string) {
   }, [magnetUri, fileName, ensureClient, markSeeding]);
 
   return { ...state, start, cancel };
+}
+
+/** Minimal surface waitForMetadata needs: real torrents satisfy it as-is. */
+export interface MetadataSource {
+  readonly files: { readonly length: number };
+  once(event: "ready" | "error", cb: () => void): unknown;
+}
+
+/**
+ * Resolve once the torrent's metadata (file list) is available. Magnet links
+ * carry no file list — it arrives asynchronously once peers answer. Reading
+ * `.files` before this resolves is the "Torrent is empty" bug.
+ */
+export function waitForMetadata(t: MetadataSource): Promise<void> {
+  if (t.files.length > 0) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    t.once("ready", () => resolve());
+    t.once("error", () =>
+      reject(new Error("Download failed. The seeder may be offline.")),
+    );
+  });
+}
+
+/** Pick the downloaded file: single-file torrents, else match by name. */
+export function pickFile<T extends { name: string }>(
+  files: readonly T[],
+  fileName: string,
+): T | undefined {
+  if (files.length === 1) return files[0];
+  return files.find((f) => f.name === fileName) ?? files[0];
+}
+
+function blobOf(file: {
+  getBlob(cb: (err: Error | null | undefined, blob?: Blob) => void): void;
+}): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    file.getBlob((err, blob) => {
+      if (err || !blob) reject(err ?? new Error("blob failed"));
+      else resolve(blob);
+    });
+  });
 }
 
 /** Write a blob to disk: File System Access picker when available, else anchor download. */

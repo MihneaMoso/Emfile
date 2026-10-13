@@ -5,10 +5,10 @@ export function trackers(): string[] {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   if (list.length > 0) return list;
-  return [
-    "wss://tracker.openwebtorrent.com",
-    "wss://tracker.webtorrent.dev",
-  ];
+  // Default verified live 2026-10-13: openwebtorrent accepts WebSocket
+  // handshakes; tracker.webtorrent.dev does not (removed). Override with
+  // NEXT_PUBLIC_TRACKERS if signaling ever needs to move again.
+  return ["wss://tracker.openwebtorrent.com"];
 }
 
 export function stunServers(): string[] {

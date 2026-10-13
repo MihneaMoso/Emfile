@@ -84,7 +84,9 @@ function InlineDownloadButton({ file }: { file: FileSummary }) {
 
 function P2pDownloadButton({ file }: { file: FileSummary }) {
   const dl = useDownload(file.magnetUri, file.name);
-  const pct = Math.round(dl.progress * 100);
+  const progress = Number.isFinite(dl.progress) ? dl.progress : 0;
+  const size = Number.isFinite(file.size) ? file.size : 0;
+  const pct = Math.round(progress * 100);
 
   if (dl.phase === "idle") {
     return (
@@ -148,7 +150,7 @@ function P2pDownloadButton({ file }: { file: FileSummary }) {
 
   const status =
     dl.phase === "downloading"
-      ? `Downloading ${pct}%${dl.speed > 0 ? ` · ${formatSpeed(dl.speed)}${formatEta(file.size, dl.progress, dl.speed)}` : ""}`
+      ? `Downloading ${pct}%${dl.speed > 0 ? ` · ${formatSpeed(dl.speed)}${formatEta(size, progress, dl.speed)}` : ""}`
       : dl.peers > 0
         ? `Found ${dl.peers} peer${dl.peers === 1 ? "" : "s"}…`
         : "Connecting…";

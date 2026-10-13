@@ -33,6 +33,13 @@ export async function seedAndRegister(
         continue;
       }
       onFile?.(f, "seeding");
+      // Memory chunk store: anything above ~1 GB lives fully in RAM while
+      // seeding and downloading — warn once per file (spec requirement).
+      if (f.size > 1024 * 1024 * 1024) {
+        toast.warning(
+          `${f.name} is over 1 GB and stays in memory while sharing. Keep this tab open.`,
+        );
+      }
       const client = await ensureClient();
       if (!client) {
         toast.error("P2P engine failed to load; page created without files.");

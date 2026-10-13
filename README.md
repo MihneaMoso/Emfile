@@ -162,6 +162,13 @@ announcements, no layout shift, and `prefers-reduced-motion` support.
   whitespace runs collapse to one hyphen, then the shared slug regex +
   reserved list decides. Paste-to-upload ignores events from inputs,
   textareas, selects and the editor, so form fields keep normal paste.
+- P2P download waits for torrent metadata (`ready`) before reading the file
+  list — magnet links resolve it asynchronously, and reading it early was the
+  "Torrent is empty" failure. A complete local copy (e.g. the seeding tab
+  downloading its own file) is saved directly instead of destroying the seed.
+  Default tracker is `wss://tracker.openwebtorrent.com` only:
+  `wss://tracker.webtorrent.dev` was verified dead (no WebSocket handshake)
+  and a dead default only slows joins; override with `NEXT_PUBLIC_TRACKERS`.
 - `?slug=` pre-fills the landing slug field via `useSearchParams` read during
   render inside a `Suspense` boundary (no effect, no extra pass); the
   not-found screen's "Create it" links there. The landing route stays static.
