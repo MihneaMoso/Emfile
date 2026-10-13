@@ -27,7 +27,7 @@ export function FilePageBody({
   /** True while SWR is polling for files still being registered. */
   syncing?: boolean;
 }) {
-  const { ensureClient, markSeeding } = useTorrent();
+  const { ensureClient, markSeeding, seeding } = useTorrent();
   // SWR owns freshness (polls until non-empty, revalidates on focus); local
   // state mirrors props for optimistic edits. The wrapper remounts this body
   // via key whenever server data changes, so no prop-sync effect is needed.
@@ -277,6 +277,7 @@ export function FilePageBody({
         syncing={syncing}
         dimmedIds={dimmedIds}
         pending={pending}
+        seeding={seeding}
         onMove={(id, dir) => void move(id, dir)}
         onRetryUpload={retryUpload}
       />

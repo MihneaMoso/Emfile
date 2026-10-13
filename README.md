@@ -158,6 +158,17 @@ announcements, no layout shift, and `prefers-reduced-motion` support.
   `touch-action: manipulation`; buttons stop double-click propagation.
 - Uploads render per-file "Adding…" rows (indeterminate progress, error +
   Retry); reorder is an optimistic position swap with rollback.
+- Downloads watch for stalls: no bytes for >20s while incomplete shows a
+  "seems stalled" warning (the peer may linger while its tab is gone) with
+  Cancel/Retry; saving is capped at 60s with a retryable error. Neither state
+  can spin forever.
+- Seeded bytes live only in the uploading tab's memory: after a refresh (or
+  on another device) editors see a "this tab isn't sharing N files" banner
+  pointing at per-file "Seed again" (infohash-verified). IndexedDB chunk
+  persistence (`idb-chunk-store`, abstract-chunk-store compliant) was
+  investigated and deliberately deferred: it can't be verified without a real
+  two-browser pass, and browsers may silently evict IDB under storage
+  pressure — revisit with browser QA rather than ship blind.
 - "Go to:" parsing lives in `parseSlugInput` (`lib/slug.ts`, unit-tested):
   whitespace runs collapse to one hyphen, then the shared slug regex +
   reserved list decides. Paste-to-upload ignores events from inputs,

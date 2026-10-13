@@ -177,7 +177,15 @@ function P2pDownloadButton({ file }: { file: FileSummary }) {
       >
         Cancel
       </Button>
-      {dl.noPeers ? (
+      {dl.stalled ? (
+        <p
+          className="max-w-56 text-xs leading-relaxed text-amber-600 dark:text-amber-400"
+          role="status"
+        >
+          Seems stalled — the seeder may have closed the tab. You can wait,
+          or cancel and retry.
+        </p>
+      ) : dl.noPeers ? (
         <p className="max-w-56 text-xs leading-relaxed text-muted-foreground">
           No one is sharing this file right now. Ask the uploader to open this
           page, or re-seed it.

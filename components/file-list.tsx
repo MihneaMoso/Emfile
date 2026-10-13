@@ -1,4 +1,5 @@
 import type { FileSummary } from "@/lib/page-types";
+import { RadioTower } from "lucide-react";
 import { FileRow } from "./file-row";
 import { Progress, Spinner } from "./loading";
 import { Button } from "./ui/button";
@@ -18,6 +19,7 @@ export function FileList({
   syncing = false,
   dimmedIds = [],
   pending = [],
+  seeding,
   onMove,
   onRetryUpload,
 }: {
@@ -29,11 +31,26 @@ export function FileList({
   /** File ids with an unconfirmed optimistic mutation (dimmed + spinner). */
   dimmedIds?: string[];
   pending?: PendingUpload[];
+  /** InfoHashes (lowercased) this tab is currently seeding. */
+  seeding?: Set<string>;
   onMove?: (fileId: string, dir: -1 | 1) => void;
   onRetryUpload?: (key: string) => void;
 }) {
   const ordered = [...files].sort((a, b) => a.position - b.position);
   const dimmed = new Set(dimmedIds);
+  // Seeded bytes live only in this tab's memory: after a refresh (or on a
+  // device that never held the files) nothing here is shared. Say so plainly
+  // instead of letting downloaders stare at "Connecting…" — but only for
+  // editors, who can actually re-seed.
+  const unseeded =
+    canEdit && seeding && pending.length === 0
+      ? ordered.filter(
+          (f) =>
+            f.kind === "p2p" &&
+            f.infoHash &&
+            !seeding.has(f.infoHash.toLowerCase()),
+        ).length
+      : 0;
   if (ordered.length === 0 && pending.length === 0) {
     return (
       <div
@@ -66,7 +83,28 @@ export function FileList({
     );
   }
   return (
-    <ul className="flex flex-col gap-3" aria-label="Files">
+    <>
+      {unseeded > 0 ? (
+        <div
+          className="mb-3 flex gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-[13px] leading-relaxed"
+          role="status"
+        >
+          <RadioTower
+            className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+            aria-hidden
+          />
+          <p>
+            <span className="font-semibold">
+              This tab isn&apos;t sharing {unseeded} file{unseeded === 1 ? "" : "s"}.
+            </span>{" "}
+            Seeded bytes live only in the tab that uploaded them — a refresh
+            forgets them. To resume sharing, re-pick {unseeded === 1 ? "the file" : "each file"} via
+            its “Seed again” menu; the infohash is verified before seeding
+            restarts.
+          </p>
+        </div>
+      ) : null}
+      <ul className="flex flex-col gap-3" aria-label="Files">
       {pending.map((p) => (
         <li
           key={p.key}
@@ -119,6 +157,7 @@ export function FileList({
           moveDownDisabled={i === ordered.length - 1}
         />
       ))}
-    </ul>
+      </ul>
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isMagnetValid, pickFile, waitForMetadata } from "./hooks";
+import { isMagnetValid, isStalled, pickFile, waitForMetadata } from "./hooks";
 
 function fakeTorrent() {
   const listeners = new Map<string, Array<() => void>>();
@@ -85,5 +85,26 @@ describe("isMagnetValid", () => {
     expect(isMagnetValid("magnet:?xt=urn:btih:abc")).toBe(false);
     expect(isMagnetValid("not a magnet")).toBe(false);
     expect(isMagnetValid("null")).toBe(false);
+  });
+});
+
+describe("isStalled", () => {
+  test("flags an old, incomplete downloading transfer", () => {
+    expect(isStalled(0, 30_000, "downloading", 0.99)).toBe(true);
+  });
+  test("ignores recent progress", () => {
+    expect(isStalled(25_000, 30_000, "downloading", 0.5)).toBe(false);
+  });
+  test("ignores non-downloading phases", () => {
+    for (const phase of ["connecting", "saving", "done", "error", "idle"] as const) {
+      expect(isStalled(0, 60_000, phase, 0)).toBe(false);
+    }
+  });
+  test("ignores complete progress", () => {
+    expect(isStalled(0, 60_000, "downloading", 1)).toBe(false);
+  });
+  test("respects a custom threshold", () => {
+    expect(isStalled(0, 5_000, "downloading", 0.5, 10_000)).toBe(false);
+    expect(isStalled(0, 15_000, "downloading", 0.5, 10_000)).toBe(true);
   });
 });

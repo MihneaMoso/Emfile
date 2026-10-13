@@ -19,6 +19,8 @@ export interface DownloadState {
   progress: number;
   speed: number;
   noPeers: boolean;
+  /** No bytes for >20s while still incomplete (peer connected but silent). */
+  stalled: boolean;
   error: string | null;
 }
 
@@ -28,8 +30,26 @@ const INITIAL: DownloadState = {
   progress: 0,
   speed: 0,
   noPeers: false,
+  stalled: false,
   error: null,
 };
+
+/**
+ * Stalled transfer? Still downloading, incomplete, and no bytes for longer
+ * than the threshold (default 20s). Happens when the seeder's tab closes or
+ * freezes mid-transfer while the peer connection lingers.
+ */
+export function isStalled(
+  lastAdvanceAt: number,
+  now: number,
+  phase: DownloadPhase,
+  progress: number,
+  thresholdMs = 20_000,
+): boolean {
+  return (
+    phase === "downloading" && progress < 1 && now - lastAdvanceAt > thresholdMs
+  );
+}
 
 /**
  * Download one magnet in this tab. Connects only on user action (never
@@ -41,13 +61,25 @@ export function useDownload(magnetUri: string | null, fileName: string) {
   const [state, setState] = React.useState<DownloadState>(INITIAL);
   const torrentRef = React.useRef<Torrent | null>(null);
   const timerRef = React.useRef<number | null>(null);
+  const stallTimerRef = React.useRef<number | null>(null);
+  const saveTimerRef = React.useRef<number | null>(null);
+  const lastAdvanceRef = React.useRef(0);
   // Generation counter: cancel() bumps it so an in-flight start() stops
   // touching state (and disk) after the user gave up on it.
   const runRef = React.useRef(0);
 
+  const clearTimers = React.useCallback(() => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    if (stallTimerRef.current) window.clearInterval(stallTimerRef.current);
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    timerRef.current = null;
+    stallTimerRef.current = null;
+    saveTimerRef.current = null;
+  }, []);
+
   const cancel = React.useCallback(() => {
     runRef.current += 1;
-    if (timerRef.current) window.clearTimeout(timerRef.current);
+    clearTimers();
     const t = torrentRef.current;
     torrentRef.current = null;
     if (t) {
@@ -58,11 +90,13 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       }
     }
     setState((s) => (s.phase === "done" ? s : { ...INITIAL }));
-  }, []);
+  }, [clearTimers]);
 
   React.useEffect(
     () => () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
+      if (stallTimerRef.current) window.clearInterval(stallTimerRef.current);
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     },
     [],
   );
@@ -95,6 +129,19 @@ export function useDownload(magnetUri: string | null, fileName: string) {
     }
     if (timerRef.current) window.clearTimeout(timerRef.current);
     setState({ ...INITIAL, phase: "connecting" });
+    lastAdvanceRef.current = Date.now();
+    // Stall watchdog: a connected-but-silent peer (e.g. a seeder tab that
+    // closed or froze mid-transfer) would otherwise park the UI at 99-100%
+    // forever with no message.
+    if (stallTimerRef.current) window.clearInterval(stallTimerRef.current);
+    stallTimerRef.current = window.setInterval(() => {
+      if (!alive()) return;
+      setState((s) =>
+        isStalled(lastAdvanceRef.current, Date.now(), s.phase, s.progress)
+          ? { ...s, stalled: true }
+          : s,
+      );
+    }, 5000);
     const client = await ensureClient();
     if (!alive()) return;
     if (!client) {
@@ -106,29 +153,52 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       return;
     }
     try {
+      // Shared phase transitions (used by both the reuse path below and the
+      // fresh-download path after client.add).
+      const enterSaving = (peers: number) => {
+        if (!alive()) return;
+        setState((s) => ({
+          ...s,
+          phase: "saving",
+          progress: 1,
+          peers,
+        }));
+        // Saving must not hang forever (e.g. blob assembly stalling on a
+        // constrained device): time out with a retryable error instead.
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = window.setTimeout(() => {
+          if (!alive()) return;
+          clearTimers();
+          setState((s) =>
+            s.phase === "saving"
+              ? { ...s, phase: "error", error: "Saving is taking too long. Cancel and retry?" }
+              : s,
+          );
+        }, 60_000);
+      };
+      const enterDone = (peers: number, infoHash: string) => {
+        if (!alive()) return;
+        clearTimers();
+        setState((s) => ({
+          ...s,
+          phase: "done",
+          progress: 1,
+          peers,
+        }));
+        markSeeding(infoHash);
+      };
       // Reuse a complete local copy (e.g. this tab seeded the file) instead
       // of destroying our own seed and re-downloading it from nobody.
       const existing = client.get(magnetUri);
       if (existing) {
         const localFile = pickFile(existing.files, fileName);
         if (localFile && existing.progress >= 1) {
-          setState((s) => ({
-            ...s,
-            phase: "saving",
-            progress: 1,
-            peers: existing.numPeers,
-          }));
+          enterSaving(existing.numPeers);
           const blob = await blobOf(localFile);
           if (!alive()) return;
           await saveBlobToDisk(blob, fileName);
           if (!alive()) return;
-          setState((s) => ({
-            ...s,
-            phase: "done",
-            progress: 1,
-            peers: existing.numPeers,
-          }));
-          markSeeding(existing.infoHash);
+          enterDone(existing.numPeers, existing.infoHash);
           return;
         }
         try {
@@ -146,6 +216,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       };
       const onDownload = () => {
         if (!alive()) return;
+        lastAdvanceRef.current = Date.now();
         setState((s) => ({
           ...s,
           phase: "downloading",
@@ -155,25 +226,8 @@ export function useDownload(magnetUri: string | null, fileName: string) {
           noPeers: false,
         }));
       };
-      const onSaving = () => {
-        if (!alive()) return;
-        setState((s) => ({
-          ...s,
-          phase: "saving",
-          progress: 1,
-          peers: torrent.numPeers,
-        }));
-      };
-      const onDone = () => {
-        if (!alive()) return;
-        setState((s) => ({
-          ...s,
-          phase: "done",
-          progress: 1,
-          peers: torrent.numPeers,
-        }));
-        markSeeding(torrent.infoHash);
-      };
+      const onSaving = () => enterSaving(torrent.numPeers);
+      const onDone = () => enterDone(torrent.numPeers, torrent.infoHash);
       const onNoPeers = () => {
         setState((s) =>
           s.phase === "done" || s.phase === "saving" || s.phase === "error"
@@ -189,6 +243,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       torrent.on("done", onSaving);
       torrent.once("error", () => {
         if (!alive()) return;
+        clearTimers();
         setState((s) => ({
           ...s,
           phase: "error",
@@ -232,6 +287,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       onDone();
     } catch (err) {
       if (!alive()) return;
+      clearTimers();
       // Vendor internals can throw raw TypeErrors (e.g. on malformed input).
       // Log the technical detail for diagnostics, but show a friendly message.
       console.error("[emfile] download failed", err);
@@ -242,7 +298,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
           : "Download failed. Try again — and keep the uploader's tab open.";
       setState((s) => ({ ...s, phase: "error", error: message }));
     }
-  }, [magnetUri, fileName, ensureClient, markSeeding]);
+  }, [magnetUri, fileName, ensureClient, markSeeding, clearTimers]);
 
   return { ...state, start, cancel };
 }
