@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pickFile, waitForMetadata } from "./hooks";
+import { isMagnetValid, pickFile, waitForMetadata } from "./hooks";
 
 function fakeTorrent() {
   const listeners = new Map<string, Array<() => void>>();
@@ -58,5 +58,32 @@ describe("pickFile", () => {
   });
   test("empty list yields undefined", () => {
     expect(pickFile([], "a.txt")).toBeUndefined();
+  });
+  test("nullish list yields undefined (never throws)", () => {
+    expect(pickFile(null, "a.txt")).toBeUndefined();
+    expect(pickFile(undefined, "a.txt")).toBeUndefined();
+  });
+});
+
+describe("isMagnetValid", () => {
+  test("accepts v1 hex infohashes", () => {
+    expect(
+      isMagnetValid(
+        "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=x",
+      ),
+    ).toBe(true);
+  });
+  test("accepts v2 base32 infohashes", () => {
+    expect(
+      isMagnetValid(
+        "magnet:?xt=urn:btih:ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJ&dn=x",
+      ),
+    ).toBe(true);
+  });
+  test("rejects empty, truncated and non-magnet strings", () => {
+    expect(isMagnetValid("")).toBe(false);
+    expect(isMagnetValid("magnet:?xt=urn:btih:abc")).toBe(false);
+    expect(isMagnetValid("not a magnet")).toBe(false);
+    expect(isMagnetValid("null")).toBe(false);
   });
 });

@@ -1,1 +1,1 @@
-{"version":7,"dialect":"sqlite","entries":[{"idx":0,"version":5,"when":1791315174264,"tag":"0001_init","breakpoints":true}]}
+{"version":7,"dialect":"sqlite","entries":[{"idx":0,"version":5,"when":1791315174264,"tag":"0001_init","breakpoints":true},{"idx":1,"version":5,"when":1791899312662,"tag":"0002_ratelimit_case","breakpoints":true}]}

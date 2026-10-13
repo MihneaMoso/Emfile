@@ -169,6 +169,13 @@ announcements, no layout shift, and `prefers-reduced-motion` support.
   Default tracker is `wss://tracker.openwebtorrent.com` only:
   `wss://tracker.webtorrent.dev` was verified dead (no WebSocket handshake)
   and a dead default only slows joins; override with `NEXT_PUBLIC_TRACKERS`.
+- Better Auth's `rateLimit` table MUST stay all-lowercase (`ratelimit`,
+  export key unchanged). Turso's engine resolves UPDATE targets
+  case-sensitively: `update "rateLimit" …` fails with "no such table" while
+  every other statement works — this 500'd ALL `/api/auth/*` routes in
+  production only (classic SQLite is case-insensitive, so dev never shows
+  it). Migration `0002` drops both spellings and recreates lowercase; never
+  edit the already-applied `0001`.
 - `?slug=` pre-fills the landing slug field via `useSearchParams` read during
   render inside a `Suspense` boundary (no effect, no extra pass); the
   not-found screen's "Create it" links there. The landing route stays static.

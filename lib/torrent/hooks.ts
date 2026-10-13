@@ -69,6 +69,17 @@ export function useDownload(magnetUri: string | null, fileName: string) {
 
   const start = React.useCallback(async () => {
     if (!magnetUri) return;
+    // A malformed stored link makes the torrent engine throw deep inside
+    // (cryptic TypeErrors). Catch it here with a clear, actionable message.
+    if (!isMagnetValid(magnetUri)) {
+      setState({
+        ...INITIAL,
+        phase: "error",
+        error:
+          "This file's link looks damaged. Ask the uploader to open the page and seed it again.",
+      });
+      return;
+    }
     const run = runRef.current + 1;
     runRef.current = run;
     const alive = () => runRef.current === run;
@@ -221,11 +232,15 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       onDone();
     } catch (err) {
       if (!alive()) return;
-      setState((s) => ({
-        ...s,
-        phase: "error",
-        error: err instanceof Error ? err.message : "Download failed.",
-      }));
+      // Vendor internals can throw raw TypeErrors (e.g. on malformed input).
+      // Log the technical detail for diagnostics, but show a friendly message.
+      console.error("[emfile] download failed", err);
+      const message =
+        err instanceof Error &&
+        /seeder may be offline|empty|engine failed/i.test(err.message)
+          ? err.message
+          : "Download failed. Try again — and keep the uploader's tab open.";
+      setState((s) => ({ ...s, phase: "error", error: message }));
     }
   }, [magnetUri, fileName, ensureClient, markSeeding]);
 
@@ -234,7 +249,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
 
 /** Minimal surface waitForMetadata needs: real torrents satisfy it as-is. */
 export interface MetadataSource {
-  readonly files: { readonly length: number };
+  readonly files: { readonly length: number } | null | undefined;
   once(event: "ready" | "error", cb: () => void): unknown;
 }
 
@@ -244,7 +259,7 @@ export interface MetadataSource {
  * `.files` before this resolves is the "Torrent is empty" bug.
  */
 export function waitForMetadata(t: MetadataSource): Promise<void> {
-  if (t.files.length > 0) return Promise.resolve();
+  if (t.files && t.files.length > 0) return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
     t.once("ready", () => resolve());
     t.once("error", () =>
@@ -255,11 +270,19 @@ export function waitForMetadata(t: MetadataSource): Promise<void> {
 
 /** Pick the downloaded file: single-file torrents, else match by name. */
 export function pickFile<T extends { name: string }>(
-  files: readonly T[],
+  files: readonly T[] | null | undefined,
   fileName: string,
 ): T | undefined {
+  if (!files || files.length === 0) return undefined;
   if (files.length === 1) return files[0];
   return files.find((f) => f.name === fileName) ?? files[0];
+}
+
+/** Magnet links our seeds produce: v1 (40 hex chars) or v2+ (base32). */
+const MAGNET_RE = /^magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,}/i;
+
+export function isMagnetValid(magnet: string): boolean {
+  return MAGNET_RE.test(magnet.trim());
 }
 
 function blobOf(file: {

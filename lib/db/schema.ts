@@ -139,7 +139,13 @@ export const rateLimits = sqliteTable("rate_limits", {
 // key/count/lastRequest (epoch ms).
 // NOTE: the export name must be `rateLimit` — the drizzle adapter validates
 // the schema object by export key.
-export const rateLimit = sqliteTable("rateLimit", {
+// NOTE 2: the physical table name MUST stay all-lowercase (`ratelimit`).
+// Turso's engine resolves UPDATE targets case-sensitively: better-auth's
+// rate limiter issues `update "rateLimit" …`, which fails with
+// "no such table" against a camelCase table while every other statement
+// works — breaking ALL /api/auth/* routes in production only
+// (classic SQLite is case-insensitive, so dev never shows it).
+export const rateLimit = sqliteTable("ratelimit", {
   id: text("id").primaryKey(),
   key: text("key").notNull(),
   count: integer("count").notNull(),
