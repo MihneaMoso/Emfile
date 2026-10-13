@@ -37,13 +37,13 @@ Read this whole spec before writing code. Where the spec is silent, make a sensi
 | **Anonymous** | No account | Create a page, upload files, set an optional PIN/password to share editing or restrict viewing, or allow anyone to edit with no approval. |
 | **Authenticated** | Google or username/password (no email required) | Everything above, plus a **dashboard** to create/update/delete pages, and **private pages** (owner-only view/edit). Anonymous users can never create private pages. |
 
-**Landing page `/`**: big dropzone (drag/drop, click, paste). A slug field is pre-filled with a random suggestion (e.g. `quiet-otter-x7k`) and can be edited before creating. An optional "Protect with a PIN" section is collapsed by default.
+**Landing page `/`**: a compact **"Go to:"** section for jumping to an existing page by slug (placed above the upload area), then the big dropzone (drag/drop, click, paste). A slug field is pre-filled with a random suggestion (e.g. `quiet-otter-x7k`) and can be edited before creating. An optional "Protect with a PIN" section is collapsed by default.
 
-**File page `/file/<slug>`**: editable title and description, an upload button, and a file list where every file has a download button. Text files open in an in-browser editor when tapped.
+**File page `/file/<slug>`**: editable title and description, an upload button, and a file list where **every file row has its own Download button**. Text files open in an in-browser editor on **double-click** (desktop) or tap (touch), and the editor follows the browser/OS light or dark theme.
 
 **Cross-cutting requirements**
 - Fully responsive, mobile-first. Verify at 375px, 768px and 1280px.
-- Light and dark themes.
+- Light and dark themes that **follow the browser/OS color scheme by default** (with a manual toggle). Every third-party component (CodeMirror editor, `sonner` toasts, dialogs, drawers, scrollbars) must follow the active theme too; none may stay light in dark mode.
 - Target Vercel first, but stay portable to any Node host.
 - Total running cost: **$0**.
 
@@ -73,7 +73,7 @@ Read this whole spec before writing code. Where the spec is silent, make a sensi
 | Access cookies | **jose** (signed JWTs) |
 | Validation / ids | **zod**, **nanoid** |
 | Client data | **SWR** |
-| Text editor | **CodeMirror 6** via `@uiw/react-codemirror`, lazy-loaded language packs, loaded with `next/dynamic` (`ssr: false`) |
+| Text editor | **CodeMirror 6** via `@uiw/react-codemirror`, lazy-loaded language packs, loaded with `next/dynamic` (`ssr: false`). Themes: `@uiw/codemirror-theme-github` (`githubLight` / `githubDark`), switched by the app theme (see "Text editor" under Routes and UI) |
 | P2P transfer | **WebTorrent** (browser build) |
 | Tests | **`bun test`** (`bun:test`) |
 
@@ -256,14 +256,36 @@ Route handlers, zod-validated, JSON, same-origin checked. **Every handler calls 
 **Design language:** minimal and airy, generous whitespace, one accent color, `rounded-xl`, subtle borders, restrained motion (respect `prefers-reduced-motion`), 44px+ touch targets, safe-area insets, `dvh` units, full keyboard and ARIA support. Use shadcn defaults; do not invent a design system.
 
 ### `/` Landing
-Headline, large dropzone, slug field showing `emfile.site/file/[slug]` with a debounced availability check, collapsible PIN section. Creating a page navigates instantly while seeding continues.
+Order, top to bottom: headline, **"Go to:" section**, large dropzone, slug field showing `emfile.site/file/[slug]` with a debounced availability check, collapsible PIN section. Creating a page navigates instantly while seeding continues.
+
+#### "Go to:" section (above the upload area)
+A small, secondary-weight row that lets a visitor open an existing page by typing its slug. It must be visible without scrolling on mobile and must not visually compete with the dropzone.
+- **Layout.** A `<form>` (`aria-label="Go to a page"`) containing the label **"Go to:"**, a text input with a muted, non-editable prefix `emfile.site/file/` (shortened to `/file/` on narrow screens) and placeholder `math-book`, and a **Go** button (arrow icon, `aria-label="Go"`). Desktop: one inline row. Mobile (375px): label above, input and button on one full-width row, 44px+ touch targets. Use shadcn `Input` and `Button`; do not invent a new control.
+- **Behavior.** Submitting (Enter or the Go button) navigates to `/file/<slug>` with `router.push` (client-side, so an in-progress seed from the TorrentProvider is never interrupted). The Go button is disabled while the input is empty. Do **not** autofocus the input (it would break paste-to-upload and mobile keyboards popping up on load).
+- **Normalization (shared helper `parseSlugInput` in `lib/slug.ts`, unit-tested).** Trim, lowercase, convert spaces to hyphens, drop a trailing slash. If the user pastes a full link (for example `https://emfile.site/file/math-book/` or `emfile.site/file/math-book`), extract the slug from it. Then validate with the same slug regex and reserved-word list used everywhere else. If invalid, do not navigate; show an inline error under the input (`aria-live="polite"`, linked with `aria-describedby`): *"Slugs use lowercase letters, numbers and hyphens (3-40 characters)."*
+- **Pasting.** Paste handling for file uploads applies page-wide, **except** when focus is inside this input, where text paste behaves normally.
+- **No pre-check request.** Do not call an existence API first. Navigate straight to `/file/<slug>` and let the page handle every state (public, PIN unlock screen, private, not found).
+- **Not-found state on `/file/[slug]`.** When the slug does not exist **or** the visitor may not know it exists (the generic 404 rule in the API section), show one identical, friendly screen: *"We couldn't find this page."* with a **Create it** button that goes to `/?slug=<slug>` (only for slugs that are valid and unreserved) and a link back home. The landing slug field reads the `slug` query parameter client-side (inside a `Suspense` boundary, so the landing page stays statically rendered) and pre-fills it when present.
+- **Loading.** The Go button is a `LoadingButton` using `useTransition`, showing a spinner until navigation finishes (the top progress bar also runs). Disable the input while navigating.
+- **Accessibility and keyboard.** Real `<label>` bound to the input, `autocapitalize="none"`, `autocorrect="off"`, `spellcheck="false"`, `enterKeyHint="go"`, visible focus ring, and correct styling in both light and dark themes.
 
 ### `/file/[slug]`
 Server-rendered through `authorize()`, with an unlock screen when needed.
 - **Header**: inline-editable title and description (autosave, debounced, optimistic), **Share** (copy link), **Settings**.
 - **Settings** (Dialog on desktop, Drawer on mobile): slug, view/edit policy, PIN set/change/remove, visibility for signed-in owners, claim, delete.
 - **Body**: upload button plus drop area, and file rows containing icon, name, size, availability/sharing badge, and a prominent **Download** button. An overflow menu offers rename, seed again, delete.
-- **Text editor**: tapping an inline text file opens CodeMirror (full-screen sheet on mobile) with explicit **Save**, Cmd/Ctrl-S, a dirty-state guard, and language detection by extension.
+- **Download button (required on every file row):** **every** row in the file list, whether `p2p` or `inline`, always renders its own visible **Download** button (icon plus "Download" label on desktop, icon-only with `aria-label="Download <file name>"` on narrow mobile, 44px+ touch target). It is never hidden in the overflow menu, never hover-only, and never replaced by clicking the row. Behavior: for `inline` files, download the stored content as a Blob immediately with the correct file name and mime. For `p2p` files, start the WebTorrent download flow from the Loading states catalog (Connecting → Progress → Saving → Done, with Cancel and the "no peers" message). A file with no live peers still shows the button, which then reports the no-peers state. Unlocked viewers, editors and admins all see it.
+- **Text editor** (inline text files):
+  - **Opening it.** On desktop, **double-clicking a text file's row** (or its name) opens the editor. On touch devices (`pointer: coarse`) a single tap opens it, since double-tap is unreliable on mobile. Also provide an explicit **Edit** action (row button or overflow menu item) and keyboard access (focus the row and press **Enter**). Double-click must not trigger on the Download button or overflow menu (stop propagation). Prevent the browser's double-click text selection on rows (`user-select: none` on the row chrome), and set `touch-action: manipulation` on rows to avoid double-tap zoom. Viewers without edit rights get the same editor in read-only mode (no Save). Non-text and `p2p` files do nothing on double-click.
+  - **Presentation.** Dialog on desktop, full-screen sheet on mobile (`dvh`, safe-area insets, keyboard-aware so the on-screen keyboard never covers the caret).
+  - **Behavior.** Explicit **Save** button, Cmd/Ctrl-S, a dirty-state guard on close, language detection by extension (lazy-loaded language packs), the `revision` / 409 conflict handling from the API section, and the loading states from the catalog.
+  - **Theming (do not skip; this is a common failure).** The editor must **always match the current app theme, which follows the browser/OS color scheme by default**. A CodeMirror editor left on its default theme stays light even in dark mode, so it must be wired up explicitly:
+    1. Configure `next-themes` with `attribute="class"`, `defaultTheme="system"`, `enableSystem`, and add `suppressHydrationWarning` on `<html>`. Define the Tailwind v4 dark variant to follow the `.dark` class (`@custom-variant dark (&:is(.dark *));`) and define all colors as CSS variables for both light and dark.
+    2. In the editor component, read `resolvedTheme` from `useTheme()` and pass `githubDark` when it is `"dark"` and `githubLight` otherwise as the `theme` prop of `@uiw/react-codemirror`. Until the component has mounted, render the editor skeleton (avoids a hydration mismatch and a light flash).
+    3. Make the editor chrome match the theme too: the dialog/sheet, toolbar, gutters, active-line highlight, selection color, caret, scrollbars, and the editor background must use the app's CSS variables, not hard-coded white or black. Override the theme's background with the app's `--background` / `--card` variables so there is no visible seam between the editor and its container.
+    4. Set `color-scheme: light dark` on `:root` (and `color-scheme: dark` under `.dark`) so native scrollbars, form controls and the mobile keyboard match.
+    5. The editor must **react live**: if the user switches the app theme or the OS changes its color scheme while the editor is open, the editor re-themes immediately without losing content, cursor position or undo history (use CodeMirror's theme reconfiguration, never remount the editor).
+    6. Verify contrast in both themes (WCAG AA for text, selection and the active line) and that no flash of the wrong theme appears on first load.
 - SWR revalidates on focus. Include empty states, loading skeletons, and error states everywhere.
 
 ### `/login` and `/signup`
@@ -271,6 +293,54 @@ Username and password form (no email field) plus **Continue with Google**. The s
 
 ### `/dashboard` (auth only)
 Card grid of the user's pages (title, slug, visibility badge, file count, updated). Create, open, and delete with confirmation.
+
+### Loading states and motion (required everywhere)
+**Any place where the user waits, the UI must show a loading state.** Never leave a blank area, a frozen button or a silent delay. Build one small set of shared primitives in `components/loading/` and reuse them, instead of ad-hoc spinners per screen.
+
+**Primitives (no new animation libraries; CSS and Tailwind only)**
+- `Spinner`: a `lucide-react` `Loader2` with `animate-spin`, in sizes `sm`, `md`, `lg`.
+- `Skeleton`: shadcn `Skeleton` (`animate-pulse`), shaped like the content it replaces.
+- `Progress`: shadcn `Progress` for determinate progress, and an indeterminate variant (sliding bar) for unknown duration.
+- `LoadingButton`: wraps shadcn `Button`; while pending it shows a `Spinner`, sets `disabled` and `aria-busy`, and **keeps its width** so the layout does not jump.
+- `TopProgressBar`: a thin bar at the top of the viewport for route transitions (a small custom component driven by Next's navigation state, not an extra dependency).
+- Use Next.js `loading.tsx` and `<Suspense>` for route and server-component loading, `useTransition` / `useFormStatus` for pending mutations, SWR's `isLoading` / `isValidating` for client fetches, and `sonner`'s `toast.promise` for background actions.
+
+**Catalog: implement all of these**
+
+| Where | Loading treatment |
+|---|---|
+| App route transitions | `TopProgressBar`, plus `loading.tsx` for `/file/[slug]`, `/dashboard`, `/login`, `/signup` |
+| Landing: first-interaction load of WebTorrent | Dropzone shows an inline spinner and "Preparing…" while the lazy chunk loads; prefetch on idle to usually hide it |
+| Landing: slug availability check | Small spinner inside the slug input, then a check or cross icon |
+| Landing: "Go to:" navigation | Go `LoadingButton` shows a spinner and the input is disabled until the page route loads |
+| Landing: creating a page | `LoadingButton` / dropzone overlay with progress until navigation completes |
+| Upload: hashing and seeding a file | Per-file row appears immediately in an **"Adding…"** state with an indeterminate `Progress`, then switches to "Sharing from this tab" |
+| Upload: registering metadata with the server | Row stays pending (optimistic); on failure show an error state with **Retry** |
+| Download: connecting to peers | Row shows "Connecting…" with spinner, then "Found N peers" |
+| Download: transferring | Determinate `Progress` with percent, speed and ETA, plus **Cancel** |
+| Download: saving to disk | Brief "Saving…" spinner before the "Done" check |
+| Seed again: verifying the infohash | Spinner with "Verifying file…" |
+| File page first load | Skeleton for title, description and 3–5 file rows that match the real layout |
+| Unlock screen: submitting PIN/password | `LoadingButton`; inputs disabled while pending |
+| Editing title/description (autosave) | Subtle "Saving…" then "Saved" text indicator near the field |
+| Text editor: loading CodeMirror (lazy chunk) | Editor-shaped skeleton in the sheet; then content appears |
+| Text editor: saving | Save `LoadingButton`, with "Saved" confirmation and the 409 conflict state handled |
+| Settings dialog: saving, deleting, claiming | `LoadingButton` per action; destructive actions stay disabled until complete |
+| Rename, reorder, delete file | Optimistic update with a dimmed, spinner-badged row until the server confirms; roll back on error |
+| Dashboard | Card-grid skeleton on load; per-card pending state when deleting |
+| Auth: sign in, sign up, Google redirect | `LoadingButton` on the submit and on the Google button ("Redirecting…") |
+| Page revalidation on focus (SWR) | No full-screen loader; at most a small, unobtrusive spinner in the header |
+| Share: copying the link | Instant icon swap to a check for ~1.5s |
+
+**Rules**
+- **Delay short spinners.** Do not show a spinner or skeleton for operations that finish in under ~150 ms; show it after the delay, and once shown keep it for at least ~300 ms to avoid flicker.
+- **No layout shift.** Skeletons and loading buttons must match the final dimensions.
+- Prefer **determinate** progress when the total is known (P2P transfers); use indeterminate only when it is not.
+- Prefer **optimistic UI** for fast, low-risk mutations, and always handle the failure path (rollback plus a clear error with Retry).
+- **Accessibility:** loading regions get `aria-busy="true"`; status text uses `role="status"` with `aria-live="polite"` (for example "Downloading 42%"); every spinner has screen-reader text; never rely on color alone.
+- **Reduced motion:** under `prefers-reduced-motion`, replace spin and pulse animations with a static indicator or a gentle opacity change.
+- Animations use `transform` and `opacity` only (GPU-friendly), and add no measurable JavaScript to the landing page.
+- Every loading state needs a matching **error** and **empty** state. Do not leave a spinner running forever: time out long operations and show the error state.
 
 ### Footer and SEO
 - Footer: Terms/Report link (`mailto:` from env).
@@ -296,6 +366,7 @@ Card grid of the user's pages (title, slug, visibility badge, file count, update
 - `next/font`. No external images. Statically rendered landing page.
 - Pin function `regions` in `vercel.json` near the database.
 - Target Lighthouse ≥ 95 on the landing page (mobile).
+- Loading animations are CSS-only and must not add JS weight or layout shift (see "Loading states and motion").
 
 ---
 
@@ -343,7 +414,7 @@ emfile/
 │     ├─ pages/[slug]/files/[fileId]/route.ts
 │     ├─ slug-check/route.ts
 │     └─ cron/cleanup/route.ts
-├─ components/                        # ui/ (shadcn), file-list, editor, dropzone, settings
+├─ components/                        # ui/ (shadcn), loading/ (Spinner, Skeleton, LoadingButton, TopProgressBar), file-list, editor, dropzone, settings
 ├─ lib/
 │  ├─ auth.ts                         # Better Auth config
 │  ├─ authorize.ts                    # pure access function (+ tests)
@@ -387,6 +458,12 @@ Run `bun run typecheck` after each step.
 - [ ] Two-browser P2P transfer succeeds; seed again verifies the infohash
 - [ ] Inline text edit works; a stale-revision save shows the 409 UI
 - [ ] Landing to file page navigation does not interrupt seeding
+- [ ] Every wait has a loading state per the "Loading states and motion" catalog (upload, download, saving, route changes, lazy chunks, auth), with matching error states
+- [ ] Loading UI causes no layout shift, respects `prefers-reduced-motion`, and is announced to screen readers
+- [ ] "Go to:" section sits above the dropzone; typing a slug (or pasting a full emfile link) and pressing Enter or Go opens `/file/<slug>`; invalid input shows the inline error without navigating; an unknown slug lands on the friendly not-found screen whose **Create it** button pre-fills the landing slug field; it works at 375px and in both themes
+- [ ] Every file row on `/file/[slug]` shows its own Download button (inline and p2p files), on desktop and at 375px
+- [ ] Double-clicking a text file opens the editor on desktop (single tap on touch); the buttons on the row do not trigger it; Enter opens it from the keyboard
+- [ ] With the OS/browser set to dark mode, the editor opens dark (not light) with matching chrome, and re-themes live when the theme is toggled or the OS scheme changes, with no flash and no lost content/cursor
 - [ ] Layout is correct at 375px, 768px and 1280px, in light and dark themes
 
 ---

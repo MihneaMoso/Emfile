@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "sonner";
 import { TorrentProvider } from "@/lib/torrent/provider";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { TopProgressBar } from "@/components/loading";
+import { ThemedToaster } from "@/components/toaster";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -39,12 +40,13 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TorrentProvider>
+            <TopProgressBar />
             <Header />
             <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-16 sm:px-6">
               {children}
             </main>
             <Footer />
-            <Toaster richColors closeButton position="bottom-center" />
+            <ThemedToaster />
           </TorrentProvider>
         </ThemeProvider>
       </body>

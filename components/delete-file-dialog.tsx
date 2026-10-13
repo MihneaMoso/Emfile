@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { mutate } from "swr";
 import type { FileSummary } from "@/lib/page-types";
 import { Button } from "./ui/button";
+import { LoadingButton } from "./loading";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Spinner } from "./loading";
 
 export function DeleteFileDialog({
   file,
@@ -58,15 +58,9 @@ export function DeleteFileDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={remove} disabled={busy}>
-            {busy ? (
-              <>
-                <Spinner label="Deleting file" /> Deleting…
-              </>
-            ) : (
-              "Delete"
-            )}
-          </Button>
+          <LoadingButton variant="destructive" onClick={remove} loading={busy}>
+            {busy ? "Deleting…" : "Delete"}
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

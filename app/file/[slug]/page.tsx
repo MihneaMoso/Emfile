@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { eq } from "drizzle-orm";
 import { normalizeSlug } from "@/lib/slug";
@@ -8,6 +7,7 @@ import { db } from "@/lib/db/client";
 import { files as filesTable } from "@/lib/db/schema";
 import type { PageResponse } from "@/lib/page-types";
 import { UnlockForm } from "@/components/unlock-form";
+import { PageNotFound } from "@/components/page-not-found";
 import { FilePageClient } from "./file-page-client";
 
 export const runtime = "nodejs";
@@ -21,8 +21,11 @@ export async function generateMetadata({
   const { slug } = await params;
   const access = await resolveAccess(normalizeSlug(slug));
   const robots = { index: false, follow: false, noarchive: true };
-  if (!access || !access.authz.isViewer) {
+  if (!access) {
     return { title: "Not found · Emfile", robots };
+  }
+  if (!access.authz.isViewer) {
+    return { title: "Protected page · Emfile", robots };
   }
   if (access.page.viewPolicy !== "public") {
     return { title: "Protected page · Emfile", robots };
@@ -46,13 +49,14 @@ export default async function FilePage({
   const { slug: raw } = await params;
   const slug = normalizeSlug(raw);
   const access = await resolveAccess(slug);
-  // 404 (not 403) for anything the caller may not know exists.
+  // Unknown or unknowable pages (404, never 403): one identical friendly
+  // screen, so existence is never leaked. Locked pages show the generic
+  // unlock screen instead.
   if (!access || !access.authz.isViewer) {
-    // Locked pages show a generic unlock screen instead of leaking details.
     if (access && (access.page.viewPolicy === "pin" || access.page.editPolicy === "pin")) {
       return <UnlockForm slug={slug} />;
     }
-    notFound();
+    return <PageNotFound slug={slug} />;
   }
   const user = await getSessionUser();
   // File rows come from the server so first paint already has them. SWR

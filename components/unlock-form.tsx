@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "./ui/button";
+import { Lock } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Spinner } from "./loading";
+import { LoadingButton } from "./loading";
 
 export function UnlockForm({ slug }: { slug: string }) {
   const [secret, setSecret] = React.useState("");
@@ -45,11 +45,15 @@ export function UnlockForm({ slug }: { slug: string }) {
   };
 
   return (
-    <Card className="mx-auto mt-16 w-full max-w-md">
-      <CardHeader>
+    <Card className="mx-auto mt-14 w-full max-w-md shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:mt-20">
+      <CardHeader className="items-center text-center">
+        <span className="rounded-2xl bg-muted p-3" aria-hidden>
+          <Lock className="h-5 w-5 text-muted-foreground" />
+        </span>
         <CardTitle>This page is protected</CardTitle>
         <CardDescription>
-          Enter the PIN to view and edit this page.
+          Enter the PIN to view and download. Nothing about this page is shown
+          until you unlock it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -64,22 +68,22 @@ export function UnlockForm({ slug }: { slug: string }) {
               onChange={(e) => setSecret(e.target.value)}
               placeholder="Enter PIN"
               required
+              disabled={pending}
             />
           </div>
           {error ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           ) : null}
-          <Button type="submit" disabled={pending || secret.length === 0}>
-            {pending ? (
-              <>
-                <Spinner label="Unlocking" /> Unlocking…
-              </>
-            ) : (
-              "Unlock"
-            )}
-          </Button>
+          <LoadingButton
+            type="submit"
+            loading={pending}
+            disabled={pending || secret.length === 0}
+            className="w-full"
+          >
+            {pending ? "Unlocking…" : "Unlock"}
+          </LoadingButton>
         </form>
       </CardContent>
     </Card>

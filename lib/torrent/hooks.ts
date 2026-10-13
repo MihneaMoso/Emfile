@@ -9,6 +9,7 @@ export type DownloadPhase =
   | "idle"
   | "connecting"
   | "downloading"
+  | "saving"
   | "done"
   | "error";
 
@@ -99,6 +100,14 @@ export function useDownload(magnetUri: string | null, fileName: string) {
           noPeers: false,
         }));
       };
+      const onSaving = () => {
+        setState((s) => ({
+          ...s,
+          phase: "saving",
+          progress: 1,
+          peers: torrent.numPeers,
+        }));
+      };
       const onDone = () => {
         setState((s) => ({
           ...s,
@@ -110,7 +119,7 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       };
       const onNoPeers = () => {
         setState((s) =>
-          s.phase === "done" || s.phase === "error"
+          s.phase === "done" || s.phase === "saving" || s.phase === "error"
             ? s
             : { ...s, noPeers: s.peers === 0 },
         );
@@ -118,7 +127,9 @@ export function useDownload(magnetUri: string | null, fileName: string) {
 
       torrent.on("wire", onPeers);
       torrent.on("download", onDownload);
-      torrent.on("done", onDone);
+      // Torrent bytes complete: enter the brief "Saving…" phase while the
+      // blob is assembled and written to disk (catalog requirement).
+      torrent.on("done", onSaving);
       torrent.once("error", () => {
         setState((s) => ({
           ...s,
@@ -130,8 +141,8 @@ export function useDownload(magnetUri: string | null, fileName: string) {
       // No peers after ~20s: show the recovery hint.
       timerRef.current = window.setTimeout(onNoPeers, 20_000);
 
-      // Already-complete (seeder is this tab): finish immediately.
-      if (torrent.progress >= 1) onDone();
+      // Already-complete (seeder is this tab): skip straight to saving.
+      if (torrent.progress >= 1) onSaving();
 
       const file =
         torrent.files.length === 1
@@ -152,15 +163,15 @@ export function useDownload(magnetUri: string | null, fileName: string) {
         };
         check();
       });
-      onDone();
-      await new Promise<Blob>((resolve, reject) => {
-        file.getBlob((err, blob) => {
-          if (err || !blob) reject(err ?? new Error("blob failed"));
-          else resolve(blob);
+      onSaving();
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        file.getBlob((err, b) => {
+          if (err || !b) reject(err ?? new Error("blob failed"));
+          else resolve(b);
         });
-      }).then((blob) => {
-        saveBlob(blob, fileName);
       });
+      await saveBlobToDisk(blob, fileName);
+      onDone();
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -173,7 +184,8 @@ export function useDownload(magnetUri: string | null, fileName: string) {
   return { ...state, start, cancel };
 }
 
-async function saveBlob(blob: Blob, fileName: string): Promise<void> {
+/** Write a blob to disk: File System Access picker when available, else anchor download. */
+export async function saveBlobToDisk(blob: Blob, fileName: string): Promise<void> {
   const anyWindow = window as Window & {
     showSaveFilePicker?: (opts: {
       suggestedName: string;

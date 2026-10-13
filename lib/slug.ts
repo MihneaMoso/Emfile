@@ -76,6 +76,33 @@ export function normalizeSlug(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
+export type SlugParseResult =
+  | { ok: true; slug: string }
+  | { ok: false; error: string };
+
+/** Inline error shown when a "Go to:" input cannot be parsed. */
+export const SLUG_INPUT_ERROR =
+  "Slugs use lowercase letters, numbers and hyphens (3-40 characters).";
+
+/**
+ * Parse free-form "Go to:" input into a page slug.
+ * Trims, lowercases, converts whitespace runs to hyphens, drops a trailing
+ * slash, and extracts the slug when a full link is pasted
+ * (`https://emfile.site/file/math-book/` → `math-book`). The result is
+ * validated with the same regex and reserved-word list used everywhere else.
+ */
+export function parseSlugInput(raw: string): SlugParseResult {
+  const invalid = (): SlugParseResult => ({ ok: false, error: SLUG_INPUT_ERROR });
+  let s = raw.trim().toLowerCase();
+  if (!s) return invalid();
+  const fileIdx = s.indexOf("/file/");
+  if (fileIdx >= 0) s = s.slice(fileIdx + "/file/".length);
+  s = s.split(/[?#]/)[0].replace(/\/+$/, "").replace(/\s+/g, "-");
+  if (!s) return invalid();
+  if (!isSlugValid(s)) return invalid();
+  return { ok: true, slug: s };
+}
+
 export function isSlugValid(slug: string): boolean {
   if (slug.length < 3 || slug.length > 40) return false;
   if (!SLUG_RE.test(slug)) return false;

@@ -4,18 +4,37 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { toast } from "sonner";
+import { pushRoute } from "@/lib/navigation";
 import type { PageSummary } from "@/lib/page-types";
-import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "./ui/drawer";
 import { SettingsForm, settingsFromPage } from "./settings-form";
-import { Spinner } from "./loading";
+import { LoadingButton } from "./loading";
+import { Button } from "./ui/button";
+
+function useIsMobile(breakpoint = 640): boolean {
+  const [mobile, setMobile] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [breakpoint]);
+  return mobile;
+}
 
 export function SettingsDialog({
   page,
@@ -30,6 +49,33 @@ export function SettingsDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const mobile = useIsMobile();
+  const body = open ? (
+    <SettingsDialogBody
+      key={`${page.id}:${page.updatedAt}`}
+      page={page}
+      slug={slug}
+      signedIn={signedIn}
+      onOpenChange={onOpenChange}
+    />
+  ) : null;
+
+  if (mobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Page settings</DrawerTitle>
+            <DrawerDescription>
+              Anyone with this PIN can edit and manage this page.
+            </DrawerDescription>
+          </DrawerHeader>
+          {body}
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -39,15 +85,7 @@ export function SettingsDialog({
             Anyone with this PIN can edit and manage this page.
           </DialogDescription>
         </DialogHeader>
-        {open ? (
-          <SettingsDialogBody
-            key={`${page.id}:${page.updatedAt}`}
-            page={page}
-            slug={slug}
-            signedIn={signedIn}
-            onOpenChange={onOpenChange}
-          />
-        ) : null}
+        {body}
       </DialogContent>
     </Dialog>
   );
@@ -108,7 +146,7 @@ function SettingsDialogBody({
       onOpenChange(false);
       const newSlug = data?.page?.slug ?? slug;
       await mutate(["page", slug]);
-      if (newSlug !== slug) router.push(`/file/${newSlug}`);
+      if (newSlug !== slug) pushRoute(router, `/file/${newSlug}`);
       else router.refresh();
     } catch {
       toast.error("Could not save settings.");
@@ -154,7 +192,7 @@ function SettingsDialogBody({
     }
   };
 
-  return (
+  const actions = (
     <>
       <SettingsForm
         page={page}
@@ -163,41 +201,38 @@ function SettingsDialogBody({
         onChange={setState}
       />
       {!page.ownerId && signedIn ? (
-        <Button variant="outline" onClick={claim} disabled={claiming}>
-          {claiming ? (
-            <>
-              <Spinner label="Claiming page" /> Claiming…
-            </>
-          ) : (
-            "Claim this page to my account"
-          )}
-        </Button>
+        <LoadingButton
+          variant="outline"
+          loading={claiming}
+          onClick={claim}
+          className="w-full"
+        >
+          {claiming ? "Claiming…" : "Claim this page to my account"}
+        </LoadingButton>
       ) : null}
-      <DialogFooter>
-        <Button variant="destructive" onClick={destroy} disabled={deleting}>
-          {deleting ? (
-            <>
-              <Spinner label="Deleting page" /> Deleting…
-            </>
-          ) : (
-            "Delete page"
-          )}
-        </Button>
+      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+        <LoadingButton
+          variant="destructive"
+          loading={deleting}
+          onClick={destroy}
+        >
+          {deleting ? "Deleting…" : "Delete page"}
+        </LoadingButton>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={busy}>
-            {busy ? (
-              <>
-                <Spinner label="Saving settings" /> Saving…
-              </>
-            ) : (
-              "Save"
-            )}
-          </Button>
+          <LoadingButton loading={busy} onClick={save}>
+            {busy ? "Saving…" : "Save"}
+          </LoadingButton>
         </div>
-      </DialogFooter>
+      </div>
     </>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {actions}
+    </div>
   );
 }

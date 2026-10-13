@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { FileSummary } from "@/lib/page-types";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Spinner } from "./loading";
+import { LoadingButton } from "./loading";
 import {
   Dialog,
   DialogContent,
@@ -97,15 +97,9 @@ function RenameDialogBody({
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button onClick={save} disabled={busy}>
-          {busy ? (
-            <>
-              <Spinner label="Renaming file" /> Saving…
-            </>
-          ) : (
-            "Save"
-          )}
-        </Button>
+        <LoadingButton onClick={save} loading={busy}>
+          {busy ? "Saving…" : "Save"}
+        </LoadingButton>
       </DialogFooter>
     </>
   );

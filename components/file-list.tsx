@@ -1,21 +1,40 @@
 import type { FileSummary } from "@/lib/page-types";
 import { FileRow } from "./file-row";
-import { Spinner } from "./loading";
+import { Progress, Spinner } from "./loading";
+import { Button } from "./ui/button";
+
+export interface PendingUpload {
+  key: string;
+  name: string;
+  size: number;
+  phase: "seeding" | "registering" | "error";
+  error?: string;
+}
 
 export function FileList({
   files,
   slug,
   canEdit,
   syncing = false,
+  dimmedIds = [],
+  pending = [],
+  onMove,
+  onRetryUpload,
 }: {
   files: FileSummary[];
   slug: string;
   canEdit: boolean;
   /** True while polling for files that are still being registered. */
   syncing?: boolean;
+  /** File ids with an unconfirmed optimistic mutation (dimmed + spinner). */
+  dimmedIds?: string[];
+  pending?: PendingUpload[];
+  onMove?: (fileId: string, dir: -1 | 1) => void;
+  onRetryUpload?: (key: string) => void;
 }) {
   const ordered = [...files].sort((a, b) => a.position - b.position);
-  if (ordered.length === 0) {
+  const dimmed = new Set(dimmedIds);
+  if (ordered.length === 0 && pending.length === 0) {
     return (
       <div
         className="rounded-xl border border-dashed p-10 text-center"
@@ -48,8 +67,57 @@ export function FileList({
   }
   return (
     <ul className="flex flex-col gap-3" aria-label="Files">
-      {ordered.map((f) => (
-        <FileRow key={f.id} file={f} slug={slug} canEdit={canEdit} />
+      {pending.map((p) => (
+        <li
+          key={p.key}
+          className="flex flex-col gap-2 rounded-2xl border border-dashed bg-card p-4"
+          role="status"
+          aria-live="polite"
+          aria-busy={p.phase !== "error"}
+          aria-label={p.phase === "error" ? `Failed to add ${p.name}` : `Adding ${p.name}`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">
+              {p.name}
+            </p>
+            {p.phase === "error" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-11 shrink-0"
+                onClick={() => onRetryUpload?.(p.key)}
+              >
+                Retry
+              </Button>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <Spinner label={`Adding ${p.name}`} size="sm" />
+                Adding…
+              </span>
+            )}
+          </div>
+          {p.phase === "error" ? (
+            <p role="alert" className="text-xs text-destructive">
+              {p.error ?? "Could not add this file."}
+            </p>
+          ) : (
+            <Progress
+              label={`Adding ${p.name}`}
+            />
+          )}
+        </li>
+      ))}
+      {ordered.map((f, i) => (
+        <FileRow
+          key={f.id}
+          file={f}
+          slug={slug}
+          canEdit={canEdit}
+          dimmed={dimmed.has(f.id)}
+          onMove={canEdit ? onMove : undefined}
+          moveUpDisabled={i === 0}
+          moveDownDisabled={i === ordered.length - 1}
+        />
       ))}
     </ul>
   );

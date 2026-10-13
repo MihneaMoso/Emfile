@@ -5,6 +5,7 @@ File bytes travel **peer-to-peer in the browser (WebTorrent/WebRTC)**;
 the server hosts only the site and small metadata.
 
 Bun is the only JS tooling: `bun install`, `bun run`, `bun test`.
+Requires Bun >= 1.2.0 (see `engines.bun` in `package.json`).
 
 ## Quickstart
 
@@ -90,9 +91,21 @@ sequenceDiagram
 ```
 
 Key files: `lib/torrent/provider.tsx` (singleton client in root layout),
-`lib/torrent/client.ts` (lazy `/vendor/webtorrent.min.js` + npm fallback),
+`lib/torrent/client.ts` (lazy `/vendor/webtorrent.min.js` via `webpackIgnore`
+import — no npm fallback, the package root is Node-only),
 `components/text-editor.tsx` (`next/dynamic ssr:false`, lazy languages),
-`app/file/[slug]/file-page-client.tsx` (SWR, revalidates on focus).
+`app/file/[slug]/file-page-client.tsx` (SWR, revalidates on focus),
+`components/loading.tsx` (Spinner/Skeleton/Progress/LoadingButton/TopProgressBar).
+
+## Loading states (every wait has one)
+
+Shared primitives in `components/loading.tsx`, reused everywhere (no ad-hoc
+spinners): route changes get `TopProgressBar` + `loading.tsx` skeletons;
+slug checks show an inline spinner then check/cross; page creation, uploads,
+downloads (Connecting → Found N peers → %/speed → Done + Cancel), saves,
+unlocks, renames, deletes, and auth all use `LoadingButton` / `Progress` /
+skeletons with matching error and empty states, `aria-busy` + `role="status"`
+announcements, no layout shift, and `prefers-reduced-motion` support.
 
 ## Manual QA checklist
 
@@ -104,8 +117,17 @@ Key files: `lib/torrent/provider.tsx` (singleton client in root layout),
 - [ ] Dashboard create, update, delete
 - [ ] Two-browser P2P transfer succeeds; seed again verifies infohash
 - [ ] Inline text edit works; stale-revision save shows the 409 UI
+- [ ] "New text file" creates an inline file directly
+- [ ] Every file row on `/file/[slug]` shows its own Download button (inline and p2p files), on desktop and at 375px
+- [ ] Double-clicking a text file opens the editor on desktop (single tap on touch); the buttons on the row do not trigger it; Enter opens it from the keyboard
+- [ ] With the OS/browser set to dark mode, the editor opens dark (not light) with matching chrome, and re-themes live when the theme is toggled or the OS scheme changes, with no flash and no lost content/cursor
 - [ ] Landing to file page navigation does not interrupt seeding
-- [ ] Layout correct at 375px, 768px, 1280px, light + dark themes
+- [ ] Every wait has a loading state (upload, download, saving, route
+  changes, lazy chunks, auth), with matching error states
+- [ ] Loading UI causes no layout shift, respects `prefers-reduced-motion`,
+  and is announced to screen readers
+- [ ] "Go to:" section sits above the dropzone; typing a slug (or pasting a full emfile link) and pressing Enter or Go opens `/file/<slug>`; invalid input shows the inline error without navigating; an unknown slug lands on the friendly not-found screen whose **Create it** button pre-fills the landing slug field; it works at 375px and in both themes
+- [ ] Layout is correct at 375px, 768px and 1280px, in light and dark themes
 
 ## Decisions where the spec was silent
 
@@ -113,6 +135,34 @@ Key files: `lib/torrent/provider.tsx` (singleton client in root layout),
 - Unlock cookies: 30-day jose JWTs (`mp_u_<pageId>`); creator cookies
   (`mp_c_<pageId>`) persist per anonymous page with a "set a PIN" nudge.
 - File pages are always `noindex`; only `public` pages expose OG metadata.
-- Settings use Radix `Dialog` (scrollable, `max-h-90dvh` on mobile); swapping
-  to a vaul Drawer on mobile is a one-file change in `settings-dialog.tsx`.
+- Settings use Radix `Dialog` on desktop and vaul `Drawer` on mobile
+  (`components/ui/drawer.tsx`, switched in `settings-dialog.tsx`).
+- Slug lookups normalize case/whitespace centrally in `resolveAccess` /
+  `loadPageBySlug`, so `/file/ABC` and API calls with any casing resolve to
+  the same page instead of 404ing.
+- Missing/private file pages render the `not-found` UI with `noindex` (no
+  existence leak). Because the route has a `loading.tsx` Suspense shell, the
+  shell streams first and the HTML status stays 200 with the not-found UI in
+  place (documented Next.js behavior); the JSON API returns true HTTP 404s.
+- Editor theming: `githubLightInit`/`githubDarkInit` (`@uiw/codemirror-theme-github`)
+  with backgrounds/gutters/caret/selection overridden to the app's CSS vars;
+  `theme` prop switches on `resolvedTheme` (the wrapper reconfigures in place,
+  verified in its source — no remount, no lost content/cursor). `:root` sets
+  `color-scheme: light dark` so native scrollbars/controls match.
+- Every file row has its own Download button: inline content downloads as a
+  Blob immediately; p2p runs the WebTorrent flow (Connecting → %/speed/ETA →
+  Saving → Done). Icon-only under `sm` with `aria-label`, 44px targets.
+- Text files open on double-click (desktop), single tap on coarse pointers
+  (`e.detail === 0` detects keyboard Enter), with an explicit Edit/Open
+  action; viewers get the editor read-only. Row chrome is `select-none` with
+  `touch-action: manipulation`; buttons stop double-click propagation.
+- Uploads render per-file "Adding…" rows (indeterminate progress, error +
+  Retry); reorder is an optimistic position swap with rollback.
+- "Go to:" parsing lives in `parseSlugInput` (`lib/slug.ts`, unit-tested):
+  whitespace runs collapse to one hyphen, then the shared slug regex +
+  reserved list decides. Paste-to-upload ignores events from inputs,
+  textareas, selects and the editor, so form fields keep normal paste.
+- `?slug=` pre-fills the landing slug field via `useSearchParams` read during
+  render inside a `Suspense` boundary (no effect, no extra pass); the
+  not-found screen's "Create it" links there. The landing route stays static.
 

@@ -96,10 +96,11 @@ export function SeedAgainButton({
         variant="outline"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
+        aria-label={busy ? "Verifying file" : `Seed ${file.name} again`}
       >
         {busy ? (
           <>
-            <Spinner label="Verifying file" /> Checking…
+            <Spinner label="Verifying file" size="sm" /> Verifying file…
           </>
         ) : (
           <>

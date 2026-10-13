@@ -3,12 +3,15 @@ import { isInlineText } from "@/lib/page-types";
 import { announceList } from "@/lib/torrent/client";
 import type { WebTorrentClient } from "@/lib/torrent/types";
 
+export type SeedPhase = "seeding" | "registering" | "done" | "error";
+
 /** Seed picked files and register metadata after instant navigation. */
 export async function seedAndRegister(
   target: string,
   picked: File[],
   ensureClient: () => Promise<WebTorrentClient | null>,
   markSeeding: (h: string) => void,
+  onFile?: (file: File, phase: SeedPhase, error?: string) => void,
 ): Promise<void> {
   for (const f of picked.slice(0, 100)) {
     try {
@@ -26,11 +29,14 @@ export async function seedAndRegister(
             content: text,
           }),
         });
+        onFile?.(f, "done");
         continue;
       }
+      onFile?.(f, "seeding");
       const client = await ensureClient();
       if (!client) {
         toast.error("P2P engine failed to load; page created without files.");
+        onFile?.(f, "error", "P2P engine failed to load.");
         return;
       }
       const torrent = client.seed(f, {
@@ -45,6 +51,7 @@ export async function seedAndRegister(
         }
       });
       markSeeding(hash);
+      onFile?.(f, "registering");
       await fetch(`/api/pages/${encodeURIComponent(target)}/files`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -57,8 +64,10 @@ export async function seedAndRegister(
           magnetUri: torrent.magnetURI,
         }),
       });
+      onFile?.(f, "done");
     } catch {
       toast.error(`Could not share ${f.name}.`);
+      onFile?.(f, "error", `Could not share ${f.name}.`);
     }
   }
   const { mutate } = await import("swr");

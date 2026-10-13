@@ -10,6 +10,7 @@ import {
 import { db } from "./db/client";
 import { pages, type Page } from "./db/schema";
 import { getSessionUser } from "./session";
+import { normalizeSlug } from "./slug";
 
 export interface PageAccess {
   page: Page;
@@ -18,12 +19,17 @@ export interface PageAccess {
 }
 
 export async function loadPageBySlug(slug: string): Promise<Page | null> {
-  const rows = await db.select().from(pages).where(eq(pages.slug, slug));
+  const normalized = normalizeSlug(slug);
+  const rows = await db.select().from(pages).where(eq(pages.slug, normalized));
   return rows[0] ?? null;
 }
 
 /** Resolve authorize() inputs from session + cookies. Returns 404-style null when missing. */
-export async function resolveAccess(slug: string): Promise<PageAccess | null> {
+export async function resolveAccess(rawSlug: string): Promise<PageAccess | null> {
+  // Normalize here (single place) so every API route + server component
+  // handles mixed-case / padded slugs identically. Previously each caller
+  // had to remember to normalize, which caused 404s on pages that existed.
+  const slug = normalizeSlug(rawSlug);
   const page = await loadPageBySlug(slug);
   if (!page) return null;
   const user = await getSessionUser();

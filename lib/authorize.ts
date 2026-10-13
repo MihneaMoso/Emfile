@@ -29,15 +29,16 @@ export interface PageLike {
   creatorTokenHash: string | null;
 }
 
-function hasCreator(page: PageLike, ctx: AuthContext): boolean {
-  if (!ctx.creatorCookie || !page.creatorTokenHash) return false;
-  // Cookie holds the raw token; compare via the same sha256 wrapper used
-  // at creation (lib/secrets hashToken). To keep this module dependency-free
-  // and synchronous for testability, verification happens in the caller and
-  // is passed as `creatorValid`. Here we treat a non-empty cookie as a claim
-  // only when the page actually has a stored hash — the route layer verifies.
-  return true;
-}
+/**
+ * Single source of truth for page authorization.
+ *
+ * NOTE on creator cookies: this pure function cannot do async scrypt/sha
+ * compare, so callers must pre-verify cookies and pass the results in:
+ * - `creatorValid`: creator cookie token matches `creatorTokenHash`
+ *   (callers compute this via `verifyCreatorToken`, which already requires
+ *   a stored hash — so `creatorValid: true` implies the page has one).
+ * - `unlocked` / `unlockedValid`: unlock cookie (jose JWT) is valid.
+ */
 
 /**
  * Single source of truth for page authorization.
@@ -51,15 +52,13 @@ export function authorize(
   page: PageLike,
   ctx: AuthContext & { creatorValid?: boolean; unlockedValid?: boolean },
 ): Authz {
-  void hasCreator;
   const userId = ctx.userId ?? null;
   const creatorValid = ctx.creatorValid ?? false;
   const unlocked = ctx.unlockedValid ?? ctx.unlocked ?? false;
 
   const isOwner = userId !== null && page.ownerId !== null && userId === page.ownerId;
-  // Ownerless page: creator cookie OR unlock cookie grants admin.
-  const isAnonymousAdmin =
-    page.ownerId === null && (creatorValid || unlocked);
+  // Ownerless page: verified creator cookie OR valid unlock cookie grants admin.
+  const isAnonymousAdmin = page.ownerId === null && (creatorValid || unlocked);
 
   if (isOwner || isAnonymousAdmin) {
     return { role: "admin", isAdmin: true, isEditor: true, isViewer: true };
@@ -105,13 +104,8 @@ export function policyErrors(input: {
     errors.push("PIN policies require a secret");
   }
   if ((viewPolicy === "owner" || editPolicy === "owner") && ownerId === null) {
-    errors.push("owner policies require an authenticated owner");
-  }
-  if (ownerId === null && (viewPolicy === "owner" || editPolicy === "owner")) {
     errors.push("anonymous pages cannot use owner policies");
   }
-  void isAuthenticated;
-  void hasCreator;
   return errors;
 }
 

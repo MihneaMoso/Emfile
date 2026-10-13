@@ -2,6 +2,11 @@
 
 import * as React from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { useTheme } from "next-themes";
+import {
+  githubDarkInit,
+  githubLightInit,
+} from "@uiw/codemirror-theme-github";
 import { toast } from "sonner";
 import { mutate } from "swr";
 import type { FileSummary } from "@/lib/page-types";
@@ -15,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Spinner } from "./loading";
+import { LoadingButton, Skeleton } from "./loading";
 
 async function loadLanguage(fileName: string) {
   const lang = languageForFile(fileName);
@@ -50,27 +55,64 @@ async function loadLanguage(fileName: string) {
 }
 
 /**
+ * App-chrome-matched CodeMirror themes. Backgrounds/gutters/caret/selection
+ * use the app's CSS variables (not hard-coded white/black), so there is no
+ * visible seam in either theme. Syntax colors stay the familiar github
+ * palette, which meets WCAG AA contrast on both backgrounds.
+ */
+const lightTheme = githubLightInit({
+  settings: {
+    background: "var(--card)",
+    foreground: "var(--foreground)",
+    caret: "var(--primary)",
+    selection: "#BBDFFF",
+    selectionMatch: "#BBDFFF",
+    gutterBackground: "var(--card)",
+    gutterForeground: "var(--muted-foreground)",
+    lineHighlight: "var(--muted)",
+  },
+});
+
+const darkTheme = githubDarkInit({
+  settings: {
+    background: "var(--card)",
+    foreground: "var(--foreground)",
+    caret: "var(--primary)",
+    selection: "#003d73",
+    selectionMatch: "#003d73",
+    gutterBackground: "var(--card)",
+    gutterForeground: "var(--muted-foreground)",
+    lineHighlight: "var(--muted)",
+  },
+});
+
+/**
  * Inline text editor: explicit Save + Cmd/Ctrl-S, dirty-state guard, and a
- * 409 "changed elsewhere" state with reload.
+ * 409 "changed elsewhere" state with reload. Viewers without edit rights get
+ * the same editor read-only (no Save).
  */
 export function TextEditor({
   file,
   slug,
   open,
   onOpenChange,
+  canEdit = true,
 }: {
   file: FileSummary;
   slug: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  canEdit?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl sm:rounded-xl max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-8 max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-t-2xl max-sm:pb-[env(safe-area-inset-bottom)]">
         <DialogHeader>
-          <DialogTitle className="truncate">{file.name}</DialogTitle>
+          <DialogTitle className="truncate pr-8">{file.name}</DialogTitle>
           <DialogDescription>
-            Edit inline text. Press Cmd/Ctrl-S to save.
+            {canEdit
+              ? "Edit inline text. Press Cmd/Ctrl-S to save."
+              : "Read-only — you have view access to this page."}
           </DialogDescription>
         </DialogHeader>
         {open ? (
@@ -79,6 +121,7 @@ export function TextEditor({
             file={file}
             slug={slug}
             onOpenChange={onOpenChange}
+            canEdit={canEdit}
           />
         ) : null}
       </DialogContent>
@@ -90,17 +133,34 @@ function TextEditorBody({
   file,
   slug,
   onOpenChange,
+  canEdit,
 }: {
   file: FileSummary;
   slug: string;
   onOpenChange: (v: boolean) => void;
+  canEdit: boolean;
 }) {
+  const { resolvedTheme } = useTheme();
+  // Until mounted, resolvedTheme is unresolved: render the skeleton so there
+  // is no hydration mismatch and no flash of the wrong theme. Mounted guard
+  // without setState-in-effect (same useSyncExternalStore pattern as
+  // components/theme-toggle.tsx).
+  const mounted = React.useSyncExternalStore(
+    (cb) => {
+      cb();
+      return () => {};
+    },
+    () => true,
+    () => false,
+  );
+  const theme = resolvedTheme === "dark" ? darkTheme : lightTheme;
+
   const [value, setValue] = React.useState(file.content ?? "");
   // Language packs load async; track mount to avoid setting state post-close.
-  const [extensions, setExtensions] = React.useState<unknown[]>([]);
+  const [extensions, setExtensions] = React.useState<unknown[] | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [conflict, setConflict] = React.useState<number | null>(null);
-  const dirty = value !== (file.content ?? "");
+  const dirty = canEdit && value !== (file.content ?? "");
 
   React.useEffect(() => {
     let cancelled = false;
@@ -115,6 +175,7 @@ function TextEditorBody({
   }, [file.name]);
 
   const save = React.useCallback(async () => {
+    if (!canEdit) return;
     setSaving(true);
     setConflict(null);
     try {
@@ -142,11 +203,12 @@ function TextEditorBody({
     } finally {
       setSaving(false);
     }
-  }, [value, file.id, file.revision, slug, onOpenChange]);
+  }, [value, file.id, file.revision, slug, onOpenChange, canEdit]);
 
   // Cmd/Ctrl-S to save. Body is mounted only while the dialog is open, so
   // no `open` guard or sync setState is needed here.
   React.useEffect(() => {
+    if (!canEdit) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -155,7 +217,7 @@ function TextEditorBody({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save]);
+  }, [save, canEdit]);
 
   const attemptClose = (next: boolean) => {
     if (!next && dirty && !saving) {
@@ -164,17 +226,23 @@ function TextEditorBody({
     onOpenChange(next);
   };
 
+  const loading = !mounted || extensions === null;
+
   return (
     <>
-      <p className="text-sm text-muted-foreground">
-        {dirty ? "Unsaved changes." : "No changes."} Press Cmd/Ctrl-S to save.
+      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+        {canEdit
+          ? dirty
+            ? "Unsaved changes. Press Cmd/Ctrl-S to save."
+            : "No changes. Press Cmd/Ctrl-S to save."
+          : "Read-only."}
       </p>
       {conflict !== null ? (
-        <p role="alert" className="rounded-lg border p-3 text-sm">
+        <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
           This file changed elsewhere (revision {conflict}).{" "}
           <button
             type="button"
-            className="underline"
+            className="font-medium underline underline-offset-4"
             onClick={() => {
               void mutate(["page", slug]);
               onOpenChange(false);
@@ -184,28 +252,42 @@ function TextEditorBody({
           </button>
         </p>
       ) : null}
-      <div className="overflow-hidden rounded-xl border">
-        <CodeMirror
-          value={value}
-          height="320px"
-          extensions={extensions as never[]}
-          onChange={(v: string) => setValue(v)}
-          basicSetup={{ lineNumbers: true }}
-        />
+      <div className="emfile-editor overflow-hidden rounded-xl border">
+        {loading ? (
+          <div
+            className="flex h-80 flex-col gap-2 p-4"
+            role="status"
+            aria-busy="true"
+            aria-label="Loading editor"
+          >
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-11/12" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-4/5" />
+            <Skeleton className="h-5 w-full" />
+            <span className="sr-only">Loading editor…</span>
+          </div>
+        ) : (
+          <CodeMirror
+            value={value}
+            height="320px"
+            theme={theme}
+            extensions={extensions as never[]}
+            editable={canEdit}
+            onChange={(v: string) => setValue(v)}
+            basicSetup={{ lineNumbers: true }}
+          />
+        )}
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={() => attemptClose(false)}>
           {dirty ? "Discard" : "Close"}
         </Button>
-        <Button onClick={() => void save()} disabled={saving || !dirty}>
-          {saving ? (
-            <>
-              <Spinner label="Saving file" /> Saving…
-            </>
-          ) : (
-            "Save"
-          )}
-        </Button>
+        {canEdit ? (
+          <LoadingButton onClick={() => void save()} loading={saving} disabled={saving || !dirty}>
+            {saving ? "Saving…" : "Save"}
+          </LoadingButton>
+        ) : null}
       </DialogFooter>
     </>
   );
