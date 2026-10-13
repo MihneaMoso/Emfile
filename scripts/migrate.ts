@@ -8,10 +8,23 @@ import { normalizeDatabaseUrl } from "../lib/db/url";
 // Skips Turso when TURSO_DATABASE_URL is unset (local dev uses push/auto).
 async function main() {
   if (process.env.TURSO_DATABASE_URL) {
-    const client = createClient({
-      url: normalizeDatabaseUrl(process.env.TURSO_DATABASE_URL),
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
+    const url = normalizeDatabaseUrl(process.env.TURSO_DATABASE_URL);
+    const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
+    // Remote libsql always needs a token; without one Turso answers every
+    // query with HTTP 401. Fail here with an actionable message instead of
+    // a stack trace deep inside the migrator.
+    if (!url.startsWith("file:") && !authToken) {
+      console.error(
+        "TURSO_DATABASE_URL is set but TURSO_AUTH_TOKEN is missing or empty.\n" +
+          "Set TURSO_AUTH_TOKEN (Vercel → Settings → Environment Variables, " +
+          "Production and Preview) with a token minted for the SAME Turso " +
+          "database as the URL, then redeploy.",
+      );
+      process.exit(1);
+    }
+    const client = createClient(
+      authToken ? { url, authToken } : { url },
+    );
     const db = drizzle(client);
     await migrate(db, { migrationsFolder: "./drizzle" });
     console.info("migrations applied to Turso");

@@ -57,7 +57,7 @@ Checks: `bun run typecheck`, `bun test`, `bun run build`.
    `NEXT_PUBLIC_APP_URL`, Google keys (optional), Turso vars, `CRON_SECRET`,
    `NEXT_PUBLIC_TRACKERS` / `NEXT_PUBLIC_STUN` (optional), `REPORT_EMAIL`
    (footer display only).
-4. `vercel.json` pins API functions to `iad` and adds a daily cron hitting
+4. `vercel.json` pins API functions to `iad1` and adds a daily cron hitting
    `/api/cron/cleanup` (ownerless pages inactive > 180 days).
 
 ## P2P availability caveat

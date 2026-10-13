@@ -16,7 +16,8 @@ const globalForDb = globalThis as unknown as {
 
 function build() {
   const url = resolveUrl();
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+  // Trim: tokens pasted from dashboards/CLIs often carry a trailing newline.
+  const authToken = process.env.TURSO_AUTH_TOKEN?.trim() || undefined;
   const client = createClient(
     authToken ? { url, authToken } : { url },
   );
